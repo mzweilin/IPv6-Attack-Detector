@@ -77,12 +77,16 @@ class Honeypot:
         sniff(iface=self.iface, filter="ip6", prn=self.process)
 
     def process(self, pkt):
+        # Check spoofing.
         if self.check_received(pkt) != 0:
             return
-        # IPv6 Extension Header
+        # Invalid IPv6 Extension Header
         if "IPv6ExtHdr" in pkt.summary():
             if self.do_invalid_exthdr(pkt) == 1:
                 return
+        # Checksum
+        if not self.verify_cksum(pkt):
+            return
         # NDP
         if ICMPv6ND_NS in pkt or ICMPv6ND_NA in pkt:
             self.do_NDP(pkt)
@@ -97,7 +101,6 @@ class Honeypot:
     # ret: 2: spoofing alert.
     def check_received(self, packet):
         #sig = str(packet)
-        # TODO: Verify the checksum first.
         
         sig = binascii.b2a_hex(str(packet))
         print "received:"
@@ -118,16 +121,16 @@ class Honeypot:
                     print "Spoofing Alert! (with non-standard source address)"
                 return 2
         return 0
-    
+        
     # Veryfy the checksum of packets.
-    def verify_cksum(self, pkt, proto):
-        origin_cksum = pkt[proto].cksum
-        del pkt[proto].cksum
+    def verify_cksum(self, pkt):
+        origin_cksum = pkt.cksum
+        del pkt.cksum
         pkt = Ether(str(pkt))
-        correct_cksum = pkt[proto].cksum
+        correct_cksum = pkt.cksum
         if origin_cksum == correct_cksum:
             return True
-        print "Incorrect checksum!"
+        print "wrong checksum"
         return False
 
     # Record the packet in self.sent_sigs{}, then send it to the pre-specified interface.
@@ -173,7 +176,7 @@ class Honeypot:
     # Handle the received NDP packets.
     def do_NDP(self, pkt):
         if pkt.haslayer(ICMPv6ND_NA):
-            if self.verify_cksum(pkt, ICMPv6ND_NA) and pkt[IPv6].dst in self.dst_addrs:
+            if pkt[IPv6].dst in self.dst_addrs:
                 print "ICMPv6ND_NA"
                 # Record the pair of IP6addr-to-MAC 
                 # The multicast host discovery and SLAAC will elicit NS.
@@ -190,10 +193,6 @@ class Honeypot:
         # 1. Duplicate Address Detection
         # 2. Request for MAC address
         print "ICMPv6ND_NS"
-                
-        if self.verify_cksum(pkt, ICMPv6ND_NS) == False:
-            print "Incorrect checksum!"
-            return false
         
         if not (pkt[ICMPv6ND_NS].tgt in self.unicast_addrs.values()):
             print "Irrelevant NS target."
