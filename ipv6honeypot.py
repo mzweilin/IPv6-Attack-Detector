@@ -18,7 +18,7 @@ def normalize_ip6(addr):
 # TODO: Generate MAC address with specified vendor (or prefix).
 class Honeypot:
     #all_nodes_addr = inet_pton(socket.AF_INET6, "ff02::1")
-    iface = "eth3" # predefined for the convenience of development
+    iface = "eth4" # predefined for the convenience of development
     mac = ""
     iface_id = ""
     
@@ -77,9 +77,13 @@ class Honeypot:
         sniff(iface=self.iface, filter="ip6", prn=self.process)
 
     def process(self, pkt):
-        # NDP
         if self.check_received(pkt) != 0:
             return
+        # IPv6 Extension Header
+        if "IPv6ExtHdr" in pkt.summary():
+            if self.do_invalid_exthdr(pkt) == 1:
+                return
+        # NDP
         if ICMPv6ND_NS in pkt or ICMPv6ND_NA in pkt:
             self.do_NDP(pkt)
         # ICMPv6 Echo
@@ -138,6 +142,33 @@ class Honeypot:
         else:
             self.sent_sigs[sig] = 1
         sendp(packet, iface=self.iface)
+        
+    # Handle the IPv6 invalid extention header options. (One of Nmap's host discovery technique.)
+    # ret: 0: Valid extension header, need further processing.
+    # ret: 1: Invalid extension header, reply a parameter problem message.
+    # The allocated option types are listd in http://www.iana.org/assignments/ipv6-parameters/.
+    # When receives a packet with unrecognizable options of destination extension header or hop-by-hop extension header, the IPv6 node should reply a Parameter Problem message.
+    # RFC 2460, section 4.2 defines the TLV format of options headers, and the actions that will be take when received a unrecognizable option.
+    # The action depends on the highest-order two bits:
+    # 11 - discard the packet and, only if the packet's dst addr was not a multicast address, send ICMP Parameter Problem, Code 2, message to the src addr.
+    # 10 - discard the packet and, regardless of whether or not the packet's dstaddr was a multicast address, send an parameter problem message.
+    def do_invalid_exthdr(self, pkt):
+        # known_option_types = (0x0,0x1,0xc2,0xc3,0x4,0x5,0x26,0x7,0x8,0xc9,0x8a,0x1e,0x3e,0x5e,0x63,0x7e,0x9e,0xbe,0xde,0xfe)
+        # Use the known list of Scapy's parser.
+        if HBHOptUnknown not in pkt:
+            return 0
+        else:
+            if (pkt[HBHOptUnknown].otype & 0xc0) == 0xc0: 
+                dst_type = in6_getAddrType(pkt[IPv6].dst)
+                if (dst_type & IPV6_ADDR_MULTICAST) == IPv6_ADDR_MULTICAST:
+                    return 1
+            elif pkt[HBHOptUnknown].otype & 0x80 != 0x80:
+                return 1
+            # send parameter problem message.
+            unknown_opt_ptr = str(pkt[IPv6]).find(str(pkt[HBHOptUnknown]))
+            reply = Ether(dst=pkt[Ether].src, src=self.mac)/IPv6(dst=pkt[IPv6].src, src=self.unicast_addrs.items()[0][1])/ICMPv6ParamProblem(code=2, ptr=unknown_opt_ptr)/pkt[IPv6]
+            self.send_packet(reply)
+            return 1
     
     # Handle the received NDP packets.
     def do_NDP(self, pkt):
