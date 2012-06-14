@@ -55,14 +55,14 @@ class Honeypot:
         self.link_local_addr = normalize_ip6(self.link_local_addr)
         
         #FF02:0:0:0:0:1:FFXX:XXXX
-        self.solicited_node_address = "ff02:0:0:0:0:1:ff" + self.mac.split(':')[3] + ":" + "".join(self.mac.split(':')[4:6])
-        self.solicited_node_address = normalize_ip6(self.solicited_node_address)
+        self.solicited_node_addr = "ff02:0:0:0:0:1:ff" + self.mac.split(':')[3] + ":" + "".join(self.mac.split(':')[4:6])
+        self.solicited_node_addr = normalize_ip6(self.solicited_node_addr)
         
         self.src_addrs.append(self.link_local_addr)
         self.src_addrs.append(self.unspecified_addr)
         
         self.dst_addrs.append(self.link_local_addr)
-        self.dst_addrs.append(self.solicited_node_address)
+        self.dst_addrs.append(self.solicited_node_addr)
         self.dst_addrs.append(self.all_nodes_addr)
         
     def start(self):
@@ -70,11 +70,11 @@ class Honeypot:
         print "Interface: " + self.iface
         print "MAC: " + self.mac
         print "Link-local address: " + self.link_local_addr
-        print "Solicited-node address: " + self.solicited_node_address
+        print "Solicited-node address: " + self.solicited_node_addr
         print "Unicast address: " + str(self.unicast_addrs.values())
         print "===Start listening on " + self.iface + "==="
         
-        sniff(iface=self.iface, filter="ip6", prn=self.process)
+        sniff(iface=self.iface, filter="ip6 and (not udp and not tcp)", prn=self.process)
 
     def process(self, pkt):
         # Check spoofing.
@@ -93,13 +93,21 @@ class Honeypot:
         # ICMPv6 Echo
         elif ICMPv6EchoRequest in pkt:
             self.do_ICMPv6Echo(pkt)
+        elif ICMPv6ND_RA in pkt:
+            self.do_slaac(pkt)
         return
     
     # Check up the recevied packets.
     # ret: 0: normal packets, need further processing.
     # ret: 1: sent by itself, just ignore the packets.
     # ret: 2: spoofing alert.
+    # ret: 3: uninterested packets (non-IPv6, TCP, UDP, etc.)
     def check_received(self, packet):
+        # Scapy indeed ingores the 'filter' parameter in sniff() function.
+        if IPv6 not in packet:
+            return 3
+        if UDP in packet or TCP in packet:
+            return 3
         #sig = str(packet)
         
         sig = binascii.b2a_hex(str(packet))
@@ -124,6 +132,7 @@ class Honeypot:
         
     # Veryfy the checksum of packets.
     def verify_cksum(self, pkt):
+        # Inconsistence waring: It's chksum but not cksum in UDP.
         origin_cksum = pkt.cksum
         del pkt.cksum
         pkt = Ether(str(pkt))
@@ -242,6 +251,16 @@ class Honeypot:
         print "Echo Reply summary:"
         print reply.summary
         self.send_packet(reply) 
+        return
+        
+    def do_slaac(self, ra):
+        if ICMPv6NDOptPrefixInfo not in ra or ICMPv6NDOptSrcLLAddr not in ra:
+            return
+        prefix = ra[ICMPv6NDOptPrefixInfo].prefix
+        ra_mac = ra[ICMPv6NDOptSrcLLAddr].lladdr
+        new_addr = prefix[:-1] + self.iface_id # Simple processing, need improvement.
+        ns_reply = Ether(src=self.mac, dst=ra_mac)/IPv6(src=self.unspecified_addr, dst=self.solicited_node_addr)/ICMPv6ND_NS(code=0, tgt=new_addr)
+        self.send_packet(ns_reply)
         return
     
     # Handle the received IPv6 packets with invalid extension headers.
