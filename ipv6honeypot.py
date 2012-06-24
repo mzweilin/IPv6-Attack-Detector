@@ -9,9 +9,6 @@ def inet_pton6(addr):
 def inet_ntop6(addr):
     return inet_ntop(socket.AF_INET6, addr)
 
-def normalize_ip6(addr):
-    return inet_ntop6(inet_pton6(addr))
-
 # The class Honeypot emultates an IPv6 host.
 # TODO: Normalize the IPv6 address string.
 # TODO: Make network features optional (NDP, SLAAC, DHCPv6, Multicast Hos Discovery, etc).
@@ -52,11 +49,11 @@ class Honeypot:
         
         self.iface_id = in6_mactoifaceid(self.mac).lower()
         self.link_local_addr = "fe80::" + self.iface_id
-        self.link_local_addr = normalize_ip6(self.link_local_addr)
+        self.link_local_addr = in6_ptop(self.link_local_addr)
         
         #FF02:0:0:0:0:1:FFXX:XXXX
         self.solicited_node_addr = "ff02:0:0:0:0:1:ff" + self.mac.split(':')[3] + ":" + "".join(self.mac.split(':')[4:6])
-        self.solicited_node_addr = normalize_ip6(self.solicited_node_addr)
+        self.solicited_node_addr = in6_ptop(self.solicited_node_addr)
         
         self.src_addrs.append(self.link_local_addr)
         self.src_addrs.append(self.unspecified_addr)
@@ -132,7 +129,7 @@ class Honeypot:
         
     # Veryfy the checksum of packets.
     def verify_cksum(self, pkt):
-        # Inconsistence waring: It's chksum but not cksum in UDP.
+        # Inconsistency waring: It's chksum but not cksum in UDP.
         origin_cksum = pkt.cksum
         del pkt.cksum
         pkt = Ether(str(pkt))
@@ -271,7 +268,7 @@ class Honeypot:
     # TODO: Handle the prefix length and the router lifetime.
     def add_prefix(self, prefix, prefix_len, timeout):
         addr = prefix+self.iface_id
-        addr = normalize_ip6(addr)
+        addr = in6_ptop(addr)
         self.unicast_addrs[prefix] = addr
         self.src_addrs.append(addr)
         self.dst_addrs.append(addr)
