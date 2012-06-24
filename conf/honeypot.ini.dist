@@ -1,3 +1,7 @@
+[main]
+interface = eth5
+mac = ab:cd:ef:12:34:56
+
 [IPv6]
 ndp = 1
 icmpv6_echo_unicast = 1
@@ -5,6 +9,7 @@ icmpv6_echo_multicast = 1
 icmpv6_invalid_exheader = 1
 slaac = 1
 dhcpv6 = 0
-# We only implement the network layer honeypot at the first stage.
-# tcp_open_ports = 80,21
-# udp_open_ports = 43,445
+; We only implement the network layer honeypot at the first stage.
+; Open ports.
+tcp_ports = 80,21
+udp_ports = 43,445

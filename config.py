@@ -14,6 +14,8 @@ def parse_config(cfg):
     values = {}
     try:
         # essential config items
+        values['iface'] = cfg.get('main', 'interface')
+        values['mac'] = cfg.get('main', 'mac')
         values['ndp'] = cfg.getint('IPv6', 'ndp')
         values['uecho'] = cfg.getint('IPv6', 'icmpv6_echo_unicast')
         values['mecho'] = cfg.getint('IPv6', 'icmpv6_echo_multicast')

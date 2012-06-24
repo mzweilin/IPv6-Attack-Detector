@@ -17,7 +17,6 @@ def inet_ntop6(addr):
 # TODO: Generate MAC address with specified vendor (or prefix).
 class Honeypot:
     #all_nodes_addr = inet_pton(socket.AF_INET6, "ff02::1")
-    iface = "eth4" # predefined for the convenience of development
     mac = ""
     iface_id = ""
     
@@ -45,9 +44,10 @@ class Honeypot:
     # {target_ip6:(mac)}
     ip6_neigh = {}
     
-    def __init__(self, mac, features="{'ndp':1}"):
-        self.mac = mac
-        self.features = features
+    def __init__(self, config):
+        self.mac = config['mac']
+        self.config = config
+        self.iface = config['iface']
         
         self.iface_id = in6_mactoifaceid(self.mac).lower()
         self.link_local_addr = "fe80::" + self.iface_id
@@ -79,16 +79,16 @@ class Honeypot:
         # Check spoofing.
         if self.check_received(pkt) != 0:
             return
-        if self.features['iv_ext_hdr'] == 1 and "IPv6ExtHdr" in pkt.summary():
+        if self.config['iv_ext_hdr'] == 1 and "IPv6ExtHdr" in pkt.summary():
             if self.do_invalid_exthdr(pkt) == 1:
                 return
         if not self.verify_cksum(pkt):
             return
-        if self.features['ndp'] == 1 and ([ICMPv6ND_NS] in pkt or ICMPv6ND_NA in pkt):
+        if self.config['ndp'] == 1 and ([ICMPv6ND_NS] in pkt or ICMPv6ND_NA in pkt):
             self.do_NDP(pkt)
-        elif (self.features['uecho'] == 1 or self.features['mecho'] == 1) and ICMPv6EchoRequest in pkt:
+        elif (self.config['uecho'] == 1 or self.config['mecho'] == 1) and ICMPv6EchoRequest in pkt:
             self.do_ICMPv6Echo(pkt)
-        elif self.features['slaac'] == 1 and ICMPv6ND_RA in pkt:
+        elif self.config['slaac'] == 1 and ICMPv6ND_RA in pkt:
             self.do_slaac(pkt)
         return
     
@@ -311,7 +311,7 @@ def main():
         print str(err)
         sys.exit(1)
     
-    vm = Honeypot(mac="00:01:02:03:04:05", features = config.config)
+    vm = Honeypot(config.config)
     vm.add_prefix(prefix="2012:dead:beaf:face:", prefix_len=64, timeout=3600)
     vm.start()
 
