@@ -129,15 +129,24 @@ class Honeypot:
         
     # Veryfy the checksum of packets.
     def verify_cksum(self, pkt):
-        # Inconsistency waring: It's chksum but not cksum in UDP.
-        origin_cksum = pkt.cksum
-        del pkt.cksum
-        pkt = Ether(str(pkt))
-        correct_cksum = pkt.cksum
-        if origin_cksum == correct_cksum:
-            return True
-        print "wrong checksum"
-        return False
+        if not pkt.haslayer(UDP):
+            origin_cksum = pkt.cksum
+            del pkt.cksum
+            pkt = Ether(str(pkt))
+            correct_cksum = pkt.cksum
+            if origin_cksum == correct_cksum:
+                return True
+            print "wrong checksum"
+            return False
+        else:
+            origin_cksum = pkt.chksum
+            del pkt.chksum
+            pkt = Ether(str(pkt))
+            correct_cksum = pkt.chksum
+            if origin_cksum == correct_cksum:
+                return True
+            print "wrong checksum"
+            return False
 
     # Record the packet in self.sent_sigs{}, then send it to the pre-specified interface.
     def send_packet(self, packet):
