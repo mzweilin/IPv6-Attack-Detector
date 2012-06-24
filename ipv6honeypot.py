@@ -2,6 +2,8 @@
 import binascii 
 import socket
 from scapy.all import *
+import ConfigParser
+import config
 
 def inet_pton6(addr):
     return inet_pton(socket.AF_INET6, addr)
@@ -77,20 +79,16 @@ class Honeypot:
         # Check spoofing.
         if self.check_received(pkt) != 0:
             return
-        # Invalid IPv6 Extension Header
-        if "IPv6ExtHdr" in pkt.summary():
+        if self.features['iv_ext_hdr'] == 1 and "IPv6ExtHdr" in pkt.summary():
             if self.do_invalid_exthdr(pkt) == 1:
                 return
-        # Checksum
         if not self.verify_cksum(pkt):
             return
-        # NDP
-        if ICMPv6ND_NS in pkt or ICMPv6ND_NA in pkt:
+        if self.features['ndp'] == 1 and ([ICMPv6ND_NS] in pkt or ICMPv6ND_NA in pkt):
             self.do_NDP(pkt)
-        # ICMPv6 Echo
-        elif ICMPv6EchoRequest in pkt:
+        elif (self.features['uecho'] == 1 or self.features['mecho'] == 1) and ICMPv6EchoRequest in pkt:
             self.do_ICMPv6Echo(pkt)
-        elif ICMPv6ND_RA in pkt:
+        elif self.features['slaac'] == 1 and ICMPv6ND_RA in pkt:
             self.do_slaac(pkt)
         return
     
@@ -299,17 +297,21 @@ class Honeypot:
         solic = Ether(dst=mac_dst, src=self.mac)/IPv6(src=ip6_src, dst=ip6_dst)/ICMPv6ND_NS(tgt=target)/ICMPv6NDOptSrcLLAddr(lladdr=self.mac)
         self.send_packet(solic)
         return
-        
-    # TODO: DAD mechnism needs ICMPv6 solicitation.
-    def slaac(self, req):
-        return
     
     def dhcpv6(self, req):
         return
     
 def main():
-    features = {'ndp':1}
-    vm = Honeypot(mac="00:01:02:03:04:05", features = features)
+    file = "conf/honeypot.ini"
+    cfg = ConfigParser.SafeConfigParser()
+    cfg.read(file)
+    try:
+        config.parse_config(cfg)
+    except config.ParsingError, err:
+        print str(err)
+        sys.exit(1)
+    
+    vm = Honeypot(mac="00:01:02:03:04:05", features = config.config)
     vm.add_prefix(prefix="2012:dead:beaf:face:", prefix_len=64, timeout=3600)
     vm.start()
 
