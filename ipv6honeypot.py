@@ -107,7 +107,8 @@ class Honeypot:
         
         sig = binascii.b2a_hex(str(packet))
         print "received:"
-        print sig
+        #print sig
+        print packet.summary()
         if self.sent_sigs.has_key(sig):
             print "\nI sent it just now?"
             if self.sent_sigs[sig] >= 1:
@@ -127,24 +128,25 @@ class Honeypot:
         
     # Veryfy the checksum of packets.
     def verify_cksum(self, pkt):
-        if not pkt.haslayer(UDP):
+        # Scapy uses 'cksum' or 'chksum' to index checksum value.
+        try:
             origin_cksum = pkt.cksum
             del pkt.cksum
             pkt = Ether(str(pkt))
             correct_cksum = pkt.cksum
-            if origin_cksum == correct_cksum:
+        except AttributeError:
+            try:
+                origin_cksum = pkt.chksum
+                del pkt.chksum
+                pkt = Ether(str(pkt))
+                correct_cksum = pkt.chksum
+            except AttributeError:
+                # No checksum.
                 return True
-            print "wrong checksum"
-            return False
-        else:
-            origin_cksum = pkt.chksum
-            del pkt.chksum
-            pkt = Ether(str(pkt))
-            correct_cksum = pkt.chksum
-            if origin_cksum == correct_cksum:
-                return True
-            print "wrong checksum"
-            return False
+        if origin_cksum == correct_cksum:
+            return True
+        print "wrong checksum"
+        return False
 
     # Record the packet in self.sent_sigs{}, then send it to the pre-specified interface.
     def send_packet(self, packet):
