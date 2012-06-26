@@ -3,12 +3,9 @@ from ConfigParser import NoOptionError, NoSectionError
 class ParsingError(Exception):
     pass
 
-IDENT = "consesi-agent"
-
 config = {
     'name': "IPv6 low-interaction Honeypot",
 }
-
 
 def parse_config(cfg):
     values = {}

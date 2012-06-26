@@ -73,7 +73,7 @@ class Honeypot:
         print "Unicast address: " + str(self.unicast_addrs.values())
         print "===Start listening on " + self.iface + "==="
         
-        sniff(iface=self.iface, filter="ip6 and (not udp and not tcp)", prn=self.process)
+        sniff(iface=self.iface, filter="ip6", prn=self.process)
 
     def process(self, pkt):
         # Check spoofing.
@@ -101,7 +101,7 @@ class Honeypot:
         # Scapy indeed ingores the 'filter' parameter in sniff() function.
         if IPv6 not in packet:
             return 3
-        if UDP in packet or TCP in packet:
+        if UDP in packet or TCP in packet: # It means data packets in Scapy, so DHCP and other configuration traffics are not included.
             return 3
         #sig = str(packet)
         
