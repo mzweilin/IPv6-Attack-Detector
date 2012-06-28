@@ -60,22 +60,21 @@ class RAguard:
     # Select a geniune RA from sniffing result.
     def select_genuine_ra(self):
         if len(self.ras) == 1:
-            self.genuine_ra = self.ras.keys()[0][0]
             self.genuine_ra_hash = self.ras.keys()[0]
+            self.genuine_ra = self.ras[self.genuine_ra_hash][0]
             print "Have selected the unique Router Advertisement as the genuine one."
         else:
             # print all the RAs, and ask a choice.
             ra_list = []
             for md5hash, (ra, times) in self.ras.items():
                 ra_list.append((md5hash, ra, times))
+ 
+            for index, ra in enumerate(ra_list):
+                print "Index: [%d], Frequency: %d" % (index, ra[2])
+                self.print_ra(ra[1])
                 
-            index = 0
-            while index < len(ra_list):
-                print "Index: [%d], Frequency: %d" % (index, ra_list[index][2])
-                self.print_ra(ra_list[index][1])
-                index += 1
             select_index = -1
-            while select_index < 0 or select_index > index:
+            while select_index < 0 or select_index >= len(ra_list):
                 select_index = int(raw_input("Please select the [index] of the genuine Router Advertisement:"))
             self.genuine_ra = ra_list[select_index][1]
             self.genuine_ra_hash = ra_list[select_index][0]
