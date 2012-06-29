@@ -4,6 +4,7 @@ import socket
 from scapy.all import *
 import ConfigParser
 from common import config
+from common import logger
 
 def inet_pton6(addr):
     return inet_pton(socket.AF_INET6, addr)
@@ -44,7 +45,8 @@ class Honeypot:
     # {target_ip6:(mac)}
     ip6_neigh = {}
     
-    def __init__(self, config):
+    def __init__(self, config, log):
+        self.log = log
         self.mac = config['mac']
         self.config = config
         self.iface = config['iface']
@@ -67,13 +69,12 @@ class Honeypot:
         self.dst_addrs.append(self.all_nodes_addr)
         
     def start(self):
-        print "===Initiate an IPv6 Low-interaction Honeypot.==="
-        print "Interface: " + self.iface
-        print "MAC: " + self.mac
-        print "Link-local address: " + self.link_local_addr
-        print "Solicited-node address: " + self.solicited_node_addr
-        print "Unicast address: " + str(self.unicast_addrs.values())
-        print "===Start listening on " + self.iface + "==="
+        self.log.write("===Initiated an IPv6 Low-interaction Honeypot.===", 0)
+        self.log.write("Interface: " + self.iface, 0)
+        self.log.write("MAC: " + self.mac, 0 )
+        self.log.write("Link-local address: " + self.link_local_addr, 0 )
+        self.log.write("Solicited-node address: " + self.solicited_node_addr, 0 )
+        self.log.write("Unicast address: " + str(self.unicast_addrs.values()), 0 )
         
         ip6_lfilter = lambda (r): IPv6 in r and TCP not in r and UDP not in r
         sniff(iface=self.iface, filter="ip6", lfilter=ip6_lfilter, prn=self.process)
@@ -111,14 +112,14 @@ class Honeypot:
                 self.sent_sigs[sig] = self.sent_sigs[sig] -1
                 return 1
             else:
-                print "Duplicate spoofing Alert!"
+                self.log.write("Duplicate spoofing Alert!")
                 return 2
         else:
             if packet[Ether].src == self.mac :
                 if packet[IPv6].src in self.src_addrs:
-                    print "Spoofing Alert!"
+                    self.log.write("Spoofing Alert!")
                 else:
-                    print "Spoofing Alert! (with non-standard source address)"
+                    self.log.write("Spoofing Alert! (with non-standard source address)")
                 return 2
         return 0
         
@@ -141,7 +142,7 @@ class Honeypot:
                 return True
         if origin_cksum == correct_cksum:
             return True
-        print "wrong checksum"
+        self.log.write("wrong checksum", 2)
         return False
 
     # Record the packet in self.sent_sigs{}, then send it to the pre-specified interface.
@@ -156,6 +157,8 @@ class Honeypot:
         else:
             self.sent_sigs[sig] = 1
         sendp(packet, iface=self.iface)
+        self.log.write("Sent 1 packet: %s" % packet.summary(), 1)
+        self.log.write("Packet hex: %s" % sig, 2)
         
     # Handle the IPv6 invalid extention header options. (One of Nmap's host discovery technique.)
     # ret: 0: Valid extension header, need further processing.
@@ -309,16 +312,21 @@ class Honeypot:
         return
     
 def main():
-    file = "conf/honeypot.ini"
+    log = logger.Log("test.log")
+    log.set_print_level(2)
+    
+    conf_file = "./conf/honeypot.ini"
     cfg = ConfigParser.SafeConfigParser()
-    cfg.read(file)
+    cfg.read(conf_file)
     try:
         config.parse_config(cfg)
     except config.ParsingError, err:
         print str(err)
         sys.exit(1)
     
-    vm = Honeypot(config.config)
+    log.write("Configuration file <%s> loaded." % conf_file)
+    
+    vm = Honeypot(config.config, log)
     vm.add_prefix(prefix="2012:dead:beaf:face:", prefix_len=64, timeout=3600)
     vm.start()
 
