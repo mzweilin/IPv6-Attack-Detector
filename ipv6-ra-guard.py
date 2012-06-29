@@ -2,6 +2,7 @@
 import socket
 from scapy.all import *
 import md5
+from common import common
 
 class RAguard:
     ras = {}
@@ -104,7 +105,7 @@ class RAguard:
         print 'Reachable time            : %d   \t(0x%.8x) microseconds' % (ra.reachabletime, ra.reachabletime)
         print 'Retransmit time           : %d   \t(0x%.8x) microseconds' % (ra.retranstimer, ra.retranstimer)
         if ra.haslayer(ICMPv6NDOptSrcLLAddr):
-            print ' Source link-layer address: %s' % ra.lladdr
+            print ' Source link-layer address: %s\t (%s)' % (ra.lladdr, common.mac2vendor(ra.lladdr))
         if ra.haslayer(ICMPv6NDOptMTU):
             print ' MTU                      : %d bytes' % ra.mtu
         if ra.haslayer(ICMPv6NDOptPrefixInfo):
