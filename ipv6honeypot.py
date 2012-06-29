@@ -3,7 +3,7 @@ import binascii
 import socket
 from scapy.all import *
 import ConfigParser
-import config
+from common import config
 
 def inet_pton6(addr):
     return inet_pton(socket.AF_INET6, addr)
@@ -57,9 +57,11 @@ class Honeypot:
         self.solicited_node_addr = "ff02:0:0:0:0:1:ff" + self.mac.split(':')[3] + ":" + "".join(self.mac.split(':')[4:6])
         self.solicited_node_addr = in6_ptop(self.solicited_node_addr)
         
+        # When sending packets, it will select one of these addresses as src_addr.
         self.src_addrs.append(self.link_local_addr)
         self.src_addrs.append(self.unspecified_addr)
         
+        # Packets with these dst_addr will destinate to the honeypot.
         self.dst_addrs.append(self.link_local_addr)
         self.dst_addrs.append(self.solicited_node_addr)
         self.dst_addrs.append(self.all_nodes_addr)
@@ -73,7 +75,8 @@ class Honeypot:
         print "Unicast address: " + str(self.unicast_addrs.values())
         print "===Start listening on " + self.iface + "==="
         
-        sniff(iface=self.iface, filter="ip6", prn=self.process)
+        ip6_lfilter = lambda (r): IPv6 in r and TCP not in r and UDP not in r
+        sniff(iface=self.iface, filter="ip6", lfilter=ip6_lfilter, prn=self.process)
 
     def process(self, pkt):
         # Check spoofing.
@@ -98,19 +101,12 @@ class Honeypot:
     # ret: 2: spoofing alert.
     # ret: 3: uninterested packets (non-IPv6, TCP, UDP, etc.)
     def check_received(self, packet):
-        # Scapy indeed ingores the 'filter' parameter in sniff() function.
-        if IPv6 not in packet:
-            return 3
-        if UDP in packet or TCP in packet: # It means data packets in Scapy, so DHCP and other configuration traffics are not included.
-            return 3
-        #sig = str(packet)
-        
         sig = binascii.b2a_hex(str(packet))
-        print "received:"
+        #print "received:"
         #print sig
-        print packet.summary()
+        #print packet.summary()
         if self.sent_sigs.has_key(sig):
-            print "\nI sent it just now?"
+            #print "\nI sent it just now?"
             if self.sent_sigs[sig] >= 1:
                 self.sent_sigs[sig] = self.sent_sigs[sig] -1
                 return 1
@@ -152,11 +148,11 @@ class Honeypot:
     def send_packet(self, packet):
         #sig = str(packet)
         sig = binascii.b2a_hex(str(packet))
-        print sig
-        print "\nsigs updated!"
+        #print sig
+        #print "\nsigs updated!"
         if self.sent_sigs.has_key(sig):
             self.sent_sigs[sig] = self.sent_sigs[sig] + 1
-            print self.sent_sigs
+            #print self.sent_sigs
         else:
             self.sent_sigs[sig] = 1
         sendp(packet, iface=self.iface)
@@ -263,8 +259,17 @@ class Honeypot:
         if ICMPv6NDOptPrefixInfo not in ra or ICMPv6NDOptSrcLLAddr not in ra:
             return
         prefix = ra[ICMPv6NDOptPrefixInfo].prefix
+        prefix_len = ra[ICMPv6NDOptPrefixInfo].prefixlen
         ra_mac = ra[ICMPv6NDOptSrcLLAddr].lladdr
-        new_addr = prefix[:-1] + self.iface_id # Simple processing, need improvement.
+        
+        prefix_n = inet_pton6(prefix)
+        iface_id_n = inet_pton6("::"+self.iface_id)
+        mask_n = in6_cidr2mask(prefix_len)
+        
+        valid_prefix_n = in6_and(prefix_n, mask_n)
+        new_addr_n = in6_or(valid_prefix_n, iface_id_n)
+        new_addr = inet_ntop6(new_addr_n)
+        
         ns_reply = Ether(src=self.mac, dst=ra_mac)/IPv6(src=self.unspecified_addr, dst=self.solicited_node_addr)/ICMPv6ND_NS(code=0, tgt=new_addr)
         self.send_packet(ns_reply)
         return
