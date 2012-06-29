@@ -13,8 +13,6 @@ def inet_ntop6(addr):
     return inet_ntop(socket.AF_INET6, addr)
 
 # The class Honeypot emultates an IPv6 host.
-# TODO: Normalize the IPv6 address string.
-# TODO: Make network features optional (NDP, SLAAC, DHCPv6, Multicast Hos Discovery, etc).
 # TODO: Generate MAC address with specified vendor (or prefix).
 class Honeypot:
     #all_nodes_addr = inet_pton(socket.AF_INET6, "ff02::1")
