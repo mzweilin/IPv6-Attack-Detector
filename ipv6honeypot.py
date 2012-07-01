@@ -68,12 +68,13 @@ class Honeypot:
         self.dst_addrs.append(self.all_nodes_addr)
         
     def start(self):
-        self.log.write("===Initiated an IPv6 Low-interaction Honeypot.===", 0)
-        self.log.write("Interface: " + self.iface, 0)
-        self.log.write("MAC: " + self.mac, 0 )
-        self.log.write("Link-local address: " + self.link_local_addr, 0 )
-        self.log.write("Solicited-node address: " + self.solicited_node_addr, 0 )
-        self.log.write("Unicast address: " + str(self.unicast_addrs.values()), 0 )
+        log_msg = "===Initiated an IPv6 Low-interaction Honeypot.===\n"
+        log_msg += "Interface: %s\n" % self.iface
+        log_msg += "MAC: %s\n" % self.mac
+        log_msg += "Link-local address: %s\n" % self.link_local_addr
+        log_msg += "Unicast address: " + str(self.unicast_addrs.values())
+        
+        self.log.write(log_msg, 0)
         
         ip6_lfilter = lambda (r): IPv6 in r and TCP not in r and UDP not in r
         sniff(iface=self.iface, filter="ip6", lfilter=ip6_lfilter, prn=self.process)
@@ -327,7 +328,7 @@ class Honeypot:
     
 def main():
     log = logger.Log("test.log")
-    log.set_print_level(2)
+    log.set_print_level(0)
     
     conf_file = "./conf/honeypot.ini"
     cfg = ConfigParser.SafeConfigParser()
