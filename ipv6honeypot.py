@@ -5,6 +5,7 @@ from scapy.all import *
 import ConfigParser
 from common import config
 from common import logger
+from common import common
 
 def inet_pton6(addr):
     return inet_pton(socket.AF_INET6, addr)
@@ -155,7 +156,7 @@ class Honeypot:
         else:
             self.sent_sigs[sig] = 1
         sendp(packet, iface=self.iface)
-        self.log.write("Sent 1 packet: %s" % packet.summary(), 1)
+        self.log.write("Sent 1 packet: %s" % packet.summary(), 2)
         self.log.write("Packet hex: %s" % sig, 2)
         
     # Handle the IPv6 invalid extention header options. (One of Nmap's host discovery technique.)
@@ -183,6 +184,9 @@ class Honeypot:
             unknown_opt_ptr = str(pkt[IPv6]).find(str(pkt[HBHOptUnknown]))
             reply = Ether(dst=pkt[Ether].src, src=self.mac)/IPv6(dst=pkt[IPv6].src, src=self.unicast_addrs.items()[0][1])/ICMPv6ParamProblem(code=2, ptr=unknown_opt_ptr)/pkt[IPv6]
             self.send_packet(reply)
+            log_msg = "Host discovery by IPv6 invalid extention header.\n"
+            log_msg += "From: [%s], MAC: %s (%s)." % (pkt[IPv6].src, pkt[MAC].src, common.mac2vendor(pkt[MAC].src))
+            self.log.write("Host discovery by IPv6 invalid extention header.")
             return 1
     
     # Handle the received NDP packets.
@@ -190,26 +194,32 @@ class Honeypot:
         if pkt.haslayer(ICMPv6ND_NA):
             if pkt[IPv6].dst in self.dst_addrs:
                 print "ICMPv6ND_NA"
+                log_msg = "Neighbour Advertisement received.\n"
                 # Record the pair of IP6addr-to-MAC 
                 # The multicast host discovery and SLAAC will elicit NS.
                 target = pkt[ICMPv6ND_NA].tgt
                 if target in self.solicited_targets.keys():
                     if pkt.haslayer(ICMPv6NDOptSrcLLAddr):
-                        print (pkt[ICMPv6NDOptSrcLLAddr].lladdr, pkt[IPv6].src)
-                        self.ip6_neigh[target] = (pkt[ICMPv6NDOptSrcLLAddr].lladdr)
+                        target_mac = pkt[ICMPv6NDOptSrcLLAddr].lladdr
+                        self.ip6_neigh[target] = target_mac
                         self.solicited_targets.pop(target)
+                        log_msg += "[%s], MAC: %s (%s)." % (target, target_mac, common.mac2vendor(target_mac))
                 else:
-                    print "Alert: suspicious NA packet!"
+                    log_msg += "Alert: suspicious NA packet!"
+                    
+                self.log.write()
             return
         # Unexpected Neighbour Solicitation
         # 1. Duplicate Address Detection
         # 2. Request for MAC address
-        print "ICMPv6ND_NS"
+        log_msg = "Neighbour Solicitation received.\n"
+        if pkt.haslayer(NDOptSrcLLAddr):
+            src_mac = pkt[NDOptSrcLLAddr].lladdr
+            log_msg += "[%s], MAC: %s (%s).\n" % (pkt[IPv6].src, src_mac, common.mac2vendor(src_mac))
         
         if not (pkt[ICMPv6ND_NS].tgt in self.unicast_addrs.values()):
-            print "Irrelevant NS target."
-            print pkt[ICMPv6ND_NS].tgt
-            print self.unicast_addrs.values()
+            log_msg += "Irrelevant NS target [%s].\n" % pkt[ICMPv6ND_NS].tgt
+            self.log.write(log_msg)
             return
         
         if pkt[IPv6].src == "ff02::1" and not pkt.haslayer(NDOptSrcLLAddr):
@@ -235,8 +245,8 @@ class Honeypot:
 
     # Handle the received ICMPv6 Echo packets.
     def do_ICMPv6Echo(self, req):
-        print "do_ICMPv6Echo(), receved: "
-        print req.summary
+        #print "do_ICMPv6Echo(), receved: "
+        #print req.summary
         
         ether_dst = req[Ether].src
         ether_src = self.mac
@@ -251,14 +261,20 @@ class Honeypot:
         echo_data = req[ICMPv6EchoRequest].data
                 
         reply = Ether(src=ether_src, dst=ether_dst)/IPv6(dst=ip6_dst, src=ip6_src)/ICMPv6EchoReply(id=echo_id, seq=echo_seq, data=echo_data)
-        print "Echo Reply summary:"
-        print reply.summary
+        #print "Echo Reply summary:"
+        #print reply.summary
         self.send_packet(reply) 
+        
+        log_msg = "ICMPv6 Echo received.\n"
+        log_msg += "From [%s], MAC: %s(%s).\n" % (ip6_dst, ether_dst, common.mac2vendor(ether_dst))
+        self.log.write(log_msg)
         return
         
     def do_slaac(self, ra):
         if ICMPv6NDOptPrefixInfo not in ra or ICMPv6NDOptSrcLLAddr not in ra:
             return
+            
+        log_msg = "Router Advertisement received.\n"
         prefix = ra[ICMPv6NDOptPrefixInfo].prefix
         prefix_len = ra[ICMPv6NDOptPrefixInfo].prefixlen
         ra_mac = ra[ICMPv6NDOptSrcLLAddr].lladdr
@@ -271,12 +287,12 @@ class Honeypot:
         new_addr_n = in6_or(valid_prefix_n, iface_id_n)
         new_addr = inet_ntop6(new_addr_n)
         
+        log_msg += "Prefix: %s/%d\n" % (prefix, prefix_len)
+        log_msg += "Generated a new addr: %s" % (new_addr)
+        
         ns_reply = Ether(src=self.mac, dst=ra_mac)/IPv6(src=self.unspecified_addr, dst=self.solicited_node_addr)/ICMPv6ND_NS(code=0, tgt=new_addr)
         self.send_packet(ns_reply)
-        return
-    
-    # Handle the received IPv6 packets with invalid extension headers.
-    def do_invalid_exhdr(self, req):
+        self.log.write(log_msg)
         return
     
     # Add a network prefix to the honeypot, and generate a new IPv6 unicast address.
