@@ -73,7 +73,6 @@ class Honeypot:
         log_msg += "MAC: %s\n" % self.mac
         log_msg += "Link-local address: %s\n" % self.link_local_addr
         log_msg += "Unicast address: " + str(self.unicast_addrs.values())
-        
         self.log.write(log_msg, 0)
         
         ip6_lfilter = lambda (r): IPv6 in r and TCP not in r and UDP not in r
@@ -86,7 +85,7 @@ class Honeypot:
         if self.config['iv_ext_hdr'] == 1 and "IPv6ExtHdr" in pkt.summary():
             if self.do_invalid_exthdr(pkt) == 1:
                 return
-        if not self.verify_cksum(pkt):
+        if not common.verify_cksum(pkt):
             return
         if self.config['ndp'] == 1 and ([ICMPv6ND_NS] in pkt or ICMPv6ND_NA in pkt):
             self.do_NDP(pkt)
@@ -100,7 +99,6 @@ class Honeypot:
     # ret: 0: normal packets, need further processing.
     # ret: 1: sent by itself, just ignore the packets.
     # ret: 2: spoofing alert.
-    # ret: 3: uninterested packets (non-IPv6, TCP, UDP, etc.)
     def check_received(self, packet):
         sig = binascii.b2a_hex(str(packet))
         #print "received:"
@@ -122,28 +120,6 @@ class Honeypot:
                     self.log.write("Spoofing Alert! (with non-standard source address)")
                 return 2
         return 0
-        
-    # Veryfy the checksum of packets.
-    def verify_cksum(self, pkt):
-        # Scapy uses 'cksum' or 'chksum' to index checksum value.
-        try:
-            origin_cksum = pkt.cksum
-            del pkt.cksum
-            pkt = Ether(str(pkt))
-            correct_cksum = pkt.cksum
-        except AttributeError:
-            try:
-                origin_cksum = pkt.chksum
-                del pkt.chksum
-                pkt = Ether(str(pkt))
-                correct_cksum = pkt.chksum
-            except AttributeError:
-                # No checksum.
-                return True
-        if origin_cksum == correct_cksum:
-            return True
-        self.log.write("wrong checksum", 2)
-        return False
 
     # Record the packet in self.sent_sigs{}, then send it to the pre-specified interface.
     def send_packet(self, packet):
