@@ -4,7 +4,7 @@ import re
 # Initiate the OUI list.
 # OUI is short for 'Organizationally Unique Identifier'. We can learn the vendor of a network adapter from its MAC by the OUI list.
 # The vendors' data is from http://standards.ieee.org/develop/regauth/oui/oui.txt on 2012/6/29, and it has been simplified for the release of IPv6 attack detector.
-simple_oui = open('./simple_oui.txt', 'r')
+simple_oui = open('./common/simple_oui.txt', 'r')
 oui_dict = {}
 line = simple_oui.readline()
 while line != '':
