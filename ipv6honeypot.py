@@ -242,13 +242,23 @@ class Honeypot:
         return
         
     def do_slaac(self, ra):
-        if ICMPv6NDOptPrefixInfo not in ra or ICMPv6NDOptSrcLLAddr not in ra:
-            return
-            
         log_msg = "Router Advertisement received.\n"
-        self.add_prefix(prefix, prefix_len, timeout = 3600)
-        ns_reply = Ether(src=self.mac, dst=ra_mac)/IPv6(src=self.unspecified_addr, dst=self.solicited_node_addr)/ICMPv6ND_NS(code=0, tgt=new_addr)
-        self.send_packet(ns_reply)
+        if ICMPv6NDOptPrefixInfo not in ra or ICMPv6NDOptSrcLLAddr not in ra:
+            log_msg += "Warning: No Prefix or SrcLLAddr, ignored."
+            self.log.write(log_msg)
+            return
+        
+        prefix = ra[ICMPv6NDOptPrefixInfo].prefix
+        prefix_len = ra[ICMPv6NDOptPrefixInfo].prefixlen
+        ra_mac = ra[ICMPv6NDOptSrcLLAddr].lladdr
+        done, new_addr = self.add_prefix(prefix, prefix_len, timeout = 3600)
+        if done:
+            ns_reply = Ether(src=self.mac, dst=ra_mac)/IPv6(src=self.unspecified_addr, dst=self.solicited_node_addr)/ICMPv6ND_NS(code=0, tgt=new_addr)
+            self.send_packet(ns_reply)
+            log_msg += "Append a new IPv6 address: %s/%d" % (new_addr, prefix_len)
+        else:
+            log_msg += "Warning: Prefix illegal, ignored."
+        self.log.write(log_msg)
         return
     
     # Add a network prefix to the honeypot, and generate a new IPv6 unicast address.
@@ -274,18 +284,23 @@ class Honeypot:
         self.src_addrs.append(new_addr)
         self.dst_addrs.append(new_addr)
         
-        log_msg += "Prefix: %s/%d\n" % (prefix, prefix_len)
+        log_msg = "Prefix: %s/%d\n" % (prefix, prefix_len)
         log_msg += "Generated a new addr: %s" % (new_addr)
         self.log.write(log_msg)
-        return True
+        return True, new_addr
         
     # Send Neighbour Solicitation packets.
     # TODO: How to select a source IPv6 address? It's a problem.
-    def send_NDP_NS(self, target, dad=False):
+    def send_NDP_NS(self, target, dad_flag=False):
         self.solicited_list.append((target, dad_flag, timestamp))
         
-        ip6_dst = "ff02::1:ff"+target[-7:]
-        mac_dst = "33:33:ff"+":"+target[-7:-5]+":"+target[-4,-2]+":"+target[-2:]
+        target_n = inet_pton6(target)
+        nsma_n = in6_getnsma(target_n)
+        ip6_dst = inet_ntop6(nsma_n)
+        mac_dst = in6_getnsmac(target_n)
+        
+        #ip6_dst = "ff02::1:ff"+target[-7:]
+        #mac_dst = "33:33:ff"+":"+target[-7:-5]+":"+target[-4,-2]+":"+target[-2:]
         
         if dad == True:
             ip6_src = "::"
@@ -315,7 +330,7 @@ def main():
     log.write("Configuration file <%s> loaded." % conf_file)
     
     vm = Honeypot(config.config, log)
-    vm.add_prefix(prefix="2012:dead:beaf:face:", prefix_len=64, timeout=3600)
+    vm.add_prefix(prefix="2012:dead:beaf:face::", prefix_len=64, timeout=3600)
     vm.start()
 
 if __name__ == "__main__":
