@@ -51,7 +51,11 @@ class Honeypot:
         #FF02:0:0:0:0:1:FFXX:XXXX
         self.solicited_node_addr = "ff02:0:0:0:0:1:ff" + self.mac.split(':')[3] + ":" + "".join(self.mac.split(':')[4:6])
         self.solicited_node_addr = in6_ptop(self.solicited_node_addr)
+        print "self.solicited_node_addr: " + self.solicited_node_addr
         
+        scapy_solicited_node_addr = inet_ntop6(in6_getnsma(inet_pton6(self.link_local_addr)))
+        print "scapy_solicited_node_addr: " + scapy_solicited_node_addr
+                
         # When sending packets, it will select one of these addresses as src_addr.
         self.src_addrs.append(self.link_local_addr)
         self.src_addrs.append(self.unspecified_addr)
