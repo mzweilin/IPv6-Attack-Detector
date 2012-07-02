@@ -156,8 +156,8 @@ class Honeypot:
             reply = Ether(dst=pkt[Ether].src, src=self.mac)/IPv6(dst=pkt[IPv6].src, src=self.unicast_addrs.items()[0][1])/ICMPv6ParamProblem(code=2, ptr=unknown_opt_ptr)/pkt[IPv6]
             self.send_packet(reply)
             log_msg = "Host discovery by IPv6 invalid extention header.\n"
-            log_msg += "From: [%s], MAC: %s (%s)." % (pkt[IPv6].src, pkt[MAC].src, mac2vendor(pkt[MAC].src))
-            self.log.write("Host discovery by IPv6 invalid extention header.")
+            log_msg += "From: [%s], MAC: %s (%s)." % (pkt[IPv6].src, pkt[Ether].src, mac2vendor(pkt[Ether].src))
+            self.log.write(log_msg)
             return 1
     
     # Handle the received NDP packets.
