@@ -5,13 +5,7 @@ from scapy.all import *
 import ConfigParser
 from common import config
 from common import logger
-from common import common
-
-def inet_pton6(addr):
-    return inet_pton(socket.AF_INET6, addr)
-
-def inet_ntop6(addr):
-    return inet_ntop(socket.AF_INET6, addr)
+from common.common import *
 
 # The class Honeypot emultates an IPv6 host.
 # TODO: Generate MAC address with specified vendor (or prefix).
@@ -85,7 +79,7 @@ class Honeypot:
         if self.config['iv_ext_hdr'] == 1 and "IPv6ExtHdr" in pkt.summary():
             if self.do_invalid_exthdr(pkt) == 1:
                 return
-        if not common.verify_cksum(pkt):
+        if not verify_cksum(pkt):
             return
         if self.config['ndp'] == 1 and ([ICMPv6ND_NS] in pkt or ICMPv6ND_NA in pkt):
             self.do_NDP(pkt)
@@ -162,7 +156,7 @@ class Honeypot:
             reply = Ether(dst=pkt[Ether].src, src=self.mac)/IPv6(dst=pkt[IPv6].src, src=self.unicast_addrs.items()[0][1])/ICMPv6ParamProblem(code=2, ptr=unknown_opt_ptr)/pkt[IPv6]
             self.send_packet(reply)
             log_msg = "Host discovery by IPv6 invalid extention header.\n"
-            log_msg += "From: [%s], MAC: %s (%s)." % (pkt[IPv6].src, pkt[MAC].src, common.mac2vendor(pkt[MAC].src))
+            log_msg += "From: [%s], MAC: %s (%s)." % (pkt[IPv6].src, pkt[MAC].src, mac2vendor(pkt[MAC].src))
             self.log.write("Host discovery by IPv6 invalid extention header.")
             return 1
     
@@ -180,7 +174,7 @@ class Honeypot:
                         target_mac = pkt[ICMPv6NDOptSrcLLAddr].lladdr
                         self.ip6_neigh[target] = target_mac
                         self.solicited_targets.pop(target)
-                        log_msg += "[%s], MAC: %s (%s)." % (target, target_mac, common.mac2vendor(target_mac))
+                        log_msg += "[%s], MAC: %s (%s)." % (target, target_mac, mac2vendor(target_mac))
                 else:
                     log_msg += "Alert: suspicious NA packet!"
                     
@@ -192,7 +186,7 @@ class Honeypot:
         log_msg = "Neighbour Solicitation received.\n"
         if pkt.haslayer(NDOptSrcLLAddr):
             src_mac = pkt[NDOptSrcLLAddr].lladdr
-            log_msg += "[%s], MAC: %s (%s).\n" % (pkt[IPv6].src, src_mac, common.mac2vendor(src_mac))
+            log_msg += "[%s], MAC: %s (%s).\n" % (pkt[IPv6].src, src_mac, mac2vendor(src_mac))
         
         if not (pkt[ICMPv6ND_NS].tgt in self.unicast_addrs.values()):
             log_msg += "Irrelevant NS target [%s].\n" % pkt[ICMPv6ND_NS].tgt
@@ -243,7 +237,7 @@ class Honeypot:
         self.send_packet(reply) 
         
         log_msg = "ICMPv6 Echo received.\n"
-        log_msg += "From [%s], MAC: %s(%s).\n" % (ip6_dst, ether_dst, common.mac2vendor(ether_dst))
+        log_msg += "From [%s], MAC: %s(%s).\n" % (ip6_dst, ether_dst, mac2vendor(ether_dst))
         self.log.write(log_msg)
         return
         

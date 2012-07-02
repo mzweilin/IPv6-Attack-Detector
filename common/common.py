@@ -1,6 +1,8 @@
 from scapy.all import *
 import re
 
+__all__ = ["mac2vendor", "verify_cksum", "inet_ntop6", "inet_pton6"]
+
 # Initiate the OUI list.
 # OUI is short for 'Organizationally Unique Identifier'. We can learn the vendor of a network adapter from its MAC by the OUI list.
 # The vendors' data is from http://standards.ieee.org/develop/regauth/oui/oui.txt on 2012/6/29, and it has been simplified for the release of IPv6 attack detector.
@@ -46,6 +48,12 @@ def verify_cksum(pkt):
     if origin_cksum == correct_cksum:
         return True
     return False
+    
+def inet_pton6(addr):
+    return inet_pton(socket.AF_INET6, addr)
+
+def inet_ntop6(addr):
+    return inet_ntop(socket.AF_INET6, addr)
     
 def test():
     mac = "88:53:2E:C0:20:42"
