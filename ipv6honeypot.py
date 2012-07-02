@@ -246,35 +246,38 @@ class Honeypot:
             return
             
         log_msg = "Router Advertisement received.\n"
-        prefix = ra[ICMPv6NDOptPrefixInfo].prefix
-        prefix_len = ra[ICMPv6NDOptPrefixInfo].prefixlen
-        ra_mac = ra[ICMPv6NDOptSrcLLAddr].lladdr
-        
+        self.add_prefix(prefix, prefix_len, timeout = 3600)
+        ns_reply = Ether(src=self.mac, dst=ra_mac)/IPv6(src=self.unspecified_addr, dst=self.solicited_node_addr)/ICMPv6ND_NS(code=0, tgt=new_addr)
+        self.send_packet(ns_reply)
+        return
+    
+    # Add a network prefix to the honeypot, and generate a new IPv6 unicast address.
+    # TODO: Handle the router lifetime.
+    def add_prefix(self, prefix, prefix_len, timeout):
+        # Section 5.5.3 of RFC 4862: 
+        # If the sum of the prefix length and interface identifier length
+        # does not equal 128 bits, the Prefix Information option MUST be
+        # ignored.
+        if prefix_len != 64:
+            log_msg = "Warning: Prefix length is not equal to 64.\n"
+            log_msg += "Prefix: %s/%d" % (prefix, prefix_len)
+            self.log.write(log_msg, 0)
+            return False
         prefix_n = inet_pton6(prefix)
         iface_id_n = inet_pton6("::"+self.iface_id)
         mask_n = in6_cidr2mask(prefix_len)
-        
         valid_prefix_n = in6_and(prefix_n, mask_n)
         new_addr_n = in6_or(valid_prefix_n, iface_id_n)
         new_addr = inet_ntop6(new_addr_n)
         
+        self.unicast_addrs[prefix] = new_addr
+        self.src_addrs.append(new_addr)
+        self.dst_addrs.append(new_addr)
+        
         log_msg += "Prefix: %s/%d\n" % (prefix, prefix_len)
         log_msg += "Generated a new addr: %s" % (new_addr)
-        
-        ns_reply = Ether(src=self.mac, dst=ra_mac)/IPv6(src=self.unspecified_addr, dst=self.solicited_node_addr)/ICMPv6ND_NS(code=0, tgt=new_addr)
-        self.send_packet(ns_reply)
         self.log.write(log_msg)
-        return
-    
-    # Add a network prefix to the honeypot, and generate a new IPv6 unicast address.
-    # TODO: Handle the prefix length and the router lifetime.
-    def add_prefix(self, prefix, prefix_len, timeout):
-        addr = prefix+self.iface_id
-        addr = in6_ptop(addr)
-        self.unicast_addrs[prefix] = addr
-        self.src_addrs.append(addr)
-        self.dst_addrs.append(addr)
-        return
+        return True
         
     # Send Neighbour Solicitation packets.
     # TODO: How to select a source IPv6 address? It's a problem.
