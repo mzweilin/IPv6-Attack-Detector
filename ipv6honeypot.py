@@ -18,7 +18,8 @@ class Honeypot:
     solicited_node_addr = "::"
     all_nodes_addr = "ff02::1"
     unspecified_addr = "::"
-    unicast_addrs = {} # Directory {prefix: addr}, for the convenience of removing.
+    unicast_addrs = {} # Directory {addr: (timestamp, timeout)}, for the convenience of removing.
+    candidate_addrs = {} # Directory {addr: (timestamp, timeout)}
     
     # The probable addresses that may be used by honeypot as source address of packets.
     # Types: unspecified(::), link-local, unicast_addrs
@@ -65,7 +66,7 @@ class Honeypot:
         log_msg += "Interface: %s\n" % self.iface
         log_msg += "MAC: %s\n" % self.mac
         log_msg += "Link-local address: %s\n" % self.link_local_addr
-        log_msg += "Unicast address: " + str(self.unicast_addrs.values())
+        log_msg += "Unicast address: " + str(self.unicast_addrs.keys())
         self.log.write(log_msg, 0)
         
         ip6_lfilter = lambda (r): IPv6 in r and TCP not in r and UDP not in r
@@ -163,21 +164,23 @@ class Honeypot:
     def do_NDP(self, pkt):
         if pkt.haslayer(ICMPv6ND_NA):
             if pkt[IPv6].dst in self.dst_addrs:
-                print "ICMPv6ND_NA"
                 log_msg = "Neighbour Advertisement received.\n"
                 # Record the pair of IP6addr-to-MAC 
                 # The multicast host discovery and SLAAC will elicit NS.
                 target = pkt[ICMPv6ND_NA].tgt
                 if target in self.solicited_targets.keys():
-                    if pkt.haslayer(ICMPv6NDOptSrcLLAddr):
-                        target_mac = pkt[ICMPv6NDOptSrcLLAddr].lladdr
+                    if pkt.haslayer(ICMPv6NDOptDstLLAddr):
+                        target_mac = pkt[ICMPv6NDOptDstLLAddr].lladdr
                         self.ip6_neigh[target] = target_mac
+                        log_msg += "[%s], MAC: %s (%s).\n" % (target, target_mac, mac2vendor(target_mac))
+                        if self.solicited_targets[target][0] == True: # DAD
+                            self.candidate_addrs.pop(target)
+                            log_msg += "DAD result: Address [%s] in use." % target
                         self.solicited_targets.pop(target)
-                        log_msg += "[%s], MAC: %s (%s)." % (target, target_mac, mac2vendor(target_mac))
                 else:
-                    log_msg += "Alert: suspicious NA packet!"
-                    
-                self.log.write()
+                    if pkt[IPv6].dst != "ff02::1":
+                        log_msg += "Alert: suspicious NA packet without NS!"
+                self.log.write(log_msg)
             return
         # Unexpected Neighbour Solicitation
         # 1. Duplicate Address Detection
@@ -254,35 +257,32 @@ class Honeypot:
         new_addr = self.prefix2addr(prefix, prefix_len)
         # TODO: Whether the address has been applied.
         if new_addr:
-            if new_addr not in self.unicast_addrs.values():
-                self.add_addr(prefix, prefix_len, new_addr, timeout = 3600)
-                self.send_NDP_NS(new_addr, dad_flag=True)
-            else:
+            if self.unicast_addrs.has_key(new_addr):
                 log_msg += "TODO: Update the router lifetime."
                 self.log.write(log_msg, 1)
+            else:
+                if self.candidate_addrs.has_key(new_addr):
+                    pass
+                else:
+                    self.candidate_addrs[new_addr] = (0, 0)
+                    self.send_NDP_NS(new_addr, dad_flag=True)
         else:
             log_msg += "Warning: Prefix illegal, ignored."
             self.log.write(log_msg)
         return
     
-    # Add a network prefix to the honeypot, and generate a new IPv6 unicast address.
+    # Add a unicast address to the honeypot.
     # TODO: Handle the router lifetime.
-    def apply_prefix(self, prefix, prefix_len, timeout):
-        new_addr = self.prefix2addr(prefix, prefix_len)
-        self.add_addr(prefix, prefix_len, new_addr, timeout)
-        return
-    
-    def add_addr(self, prefix, prefix_len, new_addr, timeout):
-        self.unicast_addrs[prefix] = new_addr
+    def add_addr(self, new_addr, prefix_len, timeout):
+        self.unicast_addrs[new_addr] = (0,0)
         self.src_addrs.append(new_addr)
         self.dst_addrs.append(new_addr)
         
-        log_msg = "Prefix: %s/%d\n" % (prefix, prefix_len)
-        log_msg += "Add a new addr: %s\n" % (new_addr)
-        log_msg += "Waiting for Duplicate Address Detection."
+        log_msg = "Add a new addr: %s/%d\n" % (new_addr, prefix_len)
         self.log.write(log_msg)
         return
-        
+    
+    # Generate a new IPv6 unicast address like [Prefix + interface identifier]/Prefixlen.
     def prefix2addr(self, prefix, prefix_len):
         # Section 5.5.3 of RFC 4862: 
         # If the sum of the prefix length and interface identifier length
@@ -313,11 +313,14 @@ class Honeypot:
         
         if dad_flag == True:
             ip6_src = "::"
+            log_msg = "Duplicate Address Detection for [%s]." % target
         else:
             ip6_src = self.unicast_addrs.items()[0][1]
+            log_msg = "Neighbour Solicitation for [%s]." % target 
         
         solic = Ether(dst=mac_dst, src=self.mac)/IPv6(src=ip6_src, dst=ip6_dst)/ICMPv6ND_NS(tgt=target)/ICMPv6NDOptSrcLLAddr(lladdr=self.mac)
         self.send_packet(solic)
+        self.log.write(log_msg)
         return
     
     def dhcpv6(self, req):
@@ -339,7 +342,8 @@ def main():
     log.write("Configuration file <%s> loaded." % conf_file)
     
     vm = Honeypot(config.config, log)
-    vm.apply_prefix(prefix="2012:dead:beaf:face::", prefix_len=64, timeout=3600)
+    static_ip6 = vm.prefix2addr(prefix="2012:dead:beaf:face::", prefix_len=64)
+    vm.add_addr(static_ip6, 64, timeout=3600)
     vm.start()
 
 if __name__ == "__main__":
