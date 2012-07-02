@@ -49,12 +49,7 @@ class Honeypot:
         self.link_local_addr = in6_ptop(self.link_local_addr)
         
         #FF02:0:0:0:0:1:FFXX:XXXX
-        self.solicited_node_addr = "ff02:0:0:0:0:1:ff" + self.mac.split(':')[3] + ":" + "".join(self.mac.split(':')[4:6])
-        self.solicited_node_addr = in6_ptop(self.solicited_node_addr)
-        print "self.solicited_node_addr: " + self.solicited_node_addr
-        
-        scapy_solicited_node_addr = inet_ntop6(in6_getnsma(inet_pton6(self.link_local_addr)))
-        print "scapy_solicited_node_addr: " + scapy_solicited_node_addr
+        self.solicited_node_addr = inet_ntop6(in6_getnsma(inet_pton6(self.link_local_addr)))
                 
         # When sending packets, it will select one of these addresses as src_addr.
         self.src_addrs.append(self.link_local_addr)
@@ -187,7 +182,8 @@ class Honeypot:
         # Unexpected Neighbour Solicitation
         # 1. Duplicate Address Detection
         # 2. Request for MAC address
-        log_msg = "Neighbour Solicitation received.\n"
+        #log_msg = "Neighbour Solicitation received.\n"
+        print "Neighbour Solicitation received.\n"
         if pkt.haslayer(NDOptSrcLLAddr):
             src_mac = pkt[NDOptSrcLLAddr].lladdr
             log_msg += "[%s], MAC: %s (%s).\n" % (pkt[IPv6].src, src_mac, mac2vendor(src_mac))
@@ -257,9 +253,8 @@ class Honeypot:
         ra_mac = ra[ICMPv6NDOptSrcLLAddr].lladdr
         done, new_addr = self.add_prefix(prefix, prefix_len, timeout = 3600)
         if done:
-            ns_reply = Ether(src=self.mac, dst=ra_mac)/IPv6(src=self.unspecified_addr, dst=self.solicited_node_addr)/ICMPv6ND_NS(code=0, tgt=new_addr)
-            self.send_packet(ns_reply)
-            log_msg += "Append a new IPv6 address: %s/%d" % (new_addr, prefix_len)
+            self.send_NDP_NS(new_addr, dad_flag=True)
+            log_msg += "Append a new IPv6 address: %s/%d, waiting for Duplicate Address Detection." % (new_addr, prefix_len)
         else:
             log_msg += "Warning: Prefix illegal, ignored."
         self.log.write(log_msg)
@@ -296,17 +291,14 @@ class Honeypot:
     # Send Neighbour Solicitation packets.
     # TODO: How to select a source IPv6 address? It's a problem.
     def send_NDP_NS(self, target, dad_flag=False):
-        self.solicited_list.append((target, dad_flag, timestamp))
+        self.solicited_targets[target] = (dad_flag, 0)
         
         target_n = inet_pton6(target)
         nsma_n = in6_getnsma(target_n)
         ip6_dst = inet_ntop6(nsma_n)
         mac_dst = in6_getnsmac(target_n)
         
-        #ip6_dst = "ff02::1:ff"+target[-7:]
-        #mac_dst = "33:33:ff"+":"+target[-7:-5]+":"+target[-4,-2]+":"+target[-2:]
-        
-        if dad == True:
+        if dad_flag == True:
             ip6_src = "::"
         else:
             ip6_src = self.unicast_addrs.items()[0][1]
