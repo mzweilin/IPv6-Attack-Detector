@@ -250,19 +250,40 @@ class Honeypot:
         
         prefix = ra[ICMPv6NDOptPrefixInfo].prefix
         prefix_len = ra[ICMPv6NDOptPrefixInfo].prefixlen
-        ra_mac = ra[ICMPv6NDOptSrcLLAddr].lladdr
-        done, new_addr = self.add_prefix(prefix, prefix_len, timeout = 3600)
-        if done:
-            self.send_NDP_NS(new_addr, dad_flag=True)
-            log_msg += "Append a new IPv6 address: %s/%d, waiting for Duplicate Address Detection." % (new_addr, prefix_len)
+        #ra_mac = ra[ICMPv6NDOptSrcLLAddr].lladdr
+        new_addr = self.prefix2addr(prefix, prefix_len)
+        # TODO: Whether the address has been applied.
+        if new_addr:
+            if new_addr not in self.unicast_addrs.values():
+                self.add_addr(prefix, prefix_len, new_addr, timeout = 3600)
+                self.send_NDP_NS(new_addr, dad_flag=True)
+            else:
+                log_msg += "TODO: Update the router lifetime."
+                self.log.write(log_msg, 1)
         else:
             log_msg += "Warning: Prefix illegal, ignored."
-        self.log.write(log_msg)
+            self.log.write(log_msg)
         return
     
     # Add a network prefix to the honeypot, and generate a new IPv6 unicast address.
     # TODO: Handle the router lifetime.
-    def add_prefix(self, prefix, prefix_len, timeout):
+    def apply_prefix(self, prefix, prefix_len, timeout):
+        new_addr = self.prefix2addr(prefix, prefix_len)
+        self.add_addr(prefix, prefix_len, new_addr, timeout)
+        return
+    
+    def add_addr(self, prefix, prefix_len, new_addr, timeout):
+        self.unicast_addrs[prefix] = new_addr
+        self.src_addrs.append(new_addr)
+        self.dst_addrs.append(new_addr)
+        
+        log_msg = "Prefix: %s/%d\n" % (prefix, prefix_len)
+        log_msg += "Add a new addr: %s\n" % (new_addr)
+        log_msg += "Waiting for Duplicate Address Detection."
+        self.log.write(log_msg)
+        return
+        
+    def prefix2addr(self, prefix, prefix_len):
         # Section 5.5.3 of RFC 4862: 
         # If the sum of the prefix length and interface identifier length
         # does not equal 128 bits, the Prefix Information option MUST be
@@ -271,22 +292,14 @@ class Honeypot:
             log_msg = "Warning: Prefix length is not equal to 64.\n"
             log_msg += "Prefix: %s/%d" % (prefix, prefix_len)
             self.log.write(log_msg, 0)
-            return False
+            return None
         prefix_n = inet_pton6(prefix)
         iface_id_n = inet_pton6("::"+self.iface_id)
         mask_n = in6_cidr2mask(prefix_len)
         valid_prefix_n = in6_and(prefix_n, mask_n)
         new_addr_n = in6_or(valid_prefix_n, iface_id_n)
         new_addr = inet_ntop6(new_addr_n)
-        
-        self.unicast_addrs[prefix] = new_addr
-        self.src_addrs.append(new_addr)
-        self.dst_addrs.append(new_addr)
-        
-        log_msg = "Prefix: %s/%d\n" % (prefix, prefix_len)
-        log_msg += "Generated a new addr: %s" % (new_addr)
-        self.log.write(log_msg)
-        return True, new_addr
+        return new_addr
         
     # Send Neighbour Solicitation packets.
     # TODO: How to select a source IPv6 address? It's a problem.
@@ -326,7 +339,7 @@ def main():
     log.write("Configuration file <%s> loaded." % conf_file)
     
     vm = Honeypot(config.config, log)
-    vm.add_prefix(prefix="2012:dead:beaf:face::", prefix_len=64, timeout=3600)
+    vm.apply_prefix(prefix="2012:dead:beaf:face::", prefix_len=64, timeout=3600)
     vm.start()
 
 if __name__ == "__main__":
