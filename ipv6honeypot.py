@@ -309,16 +309,16 @@ class Honeypot:
         target_n = inet_pton6(target)
         nsma_n = in6_getnsma(target_n)
         ip6_dst = inet_ntop6(nsma_n)
-        mac_dst = in6_getnsmac(target_n)
+        mac_dst = in6_getnsmac(nsma_n)
         
         if dad_flag == True:
             ip6_src = "::"
+            solic = Ether(dst=mac_dst, src=self.mac)/IPv6(src=ip6_src, dst=ip6_dst)/ICMPv6ND_NS(tgt=target)
             log_msg = "Duplicate Address Detection for [%s]." % target
         else:
             ip6_src = self.unicast_addrs.items()[0][1]
+            solic = Ether(dst=mac_dst, src=self.mac)/IPv6(src=ip6_src, dst=ip6_dst)/ICMPv6ND_NS(tgt=target)/ICMPv6NDOptSrcLLAddr(lladdr=self.mac)
             log_msg = "Neighbour Solicitation for [%s]." % target 
-        
-        solic = Ether(dst=mac_dst, src=self.mac)/IPv6(src=ip6_src, dst=ip6_dst)/ICMPv6ND_NS(tgt=target)/ICMPv6NDOptSrcLLAddr(lladdr=self.mac)
         self.send_packet(solic)
         self.log.write(log_msg)
         return
