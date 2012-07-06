@@ -81,7 +81,7 @@ class Honeypot:
                 return
         if not verify_cksum(pkt):
             return
-        if self.config['ndp'] == 1 and ([ICMPv6ND_NS] in pkt or ICMPv6ND_NA in pkt):
+        if self.config['ndp'] == 1 and (ICMPv6ND_NS in pkt or ICMPv6ND_NA in pkt):
             self.do_NDP(pkt)
         elif (self.config['uecho'] == 1 or self.config['mecho'] == 1) and ICMPv6EchoRequest in pkt:
             self.do_ICMPv6Echo(pkt)
@@ -162,60 +162,55 @@ class Honeypot:
     
     # Handle the received NDP packets.
     def do_NDP(self, pkt):
-        if pkt.haslayer(ICMPv6ND_NA):
-            if pkt[IPv6].dst in self.dst_addrs:
-                log_msg = "Neighbour Advertisement received.\n"
-                # Record the pair of IP6addr-to-MAC 
-                # The multicast host discovery and SLAAC will elicit NS.
-                target = pkt[ICMPv6ND_NA].tgt
-                if target in self.solicited_targets.keys():
-                    if pkt.haslayer(ICMPv6NDOptDstLLAddr):
-                        target_mac = pkt[ICMPv6NDOptDstLLAddr].lladdr
-                        self.ip6_neigh[target] = target_mac
-                        log_msg += "[%s], MAC: %s (%s).\n" % (target, target_mac, mac2vendor(target_mac))
-                        if self.solicited_targets[target][0] == True: # DAD
-                            self.candidate_addrs.pop(target)
-                            log_msg += "DAD result: Address [%s] in use." % target
-                        self.solicited_targets.pop(target)
-                else:
-                    if pkt[IPv6].dst != "ff02::1":
-                        log_msg += "Alert: suspicious NA packet without NS!"
-                self.log.write(log_msg)
+        if pkt[IPv6].dst not in self.dst_addrs:
             return
+            
+        if pkt.haslayer(ICMPv6ND_NA):
+            log_msg = "Neighbour Advertisement received.\n"
+            # Record the pair of IP6addr-to-MAC 
+            # The multicast host discovery and SLAAC will elicit NS.
+            target = pkt[ICMPv6ND_NA].tgt
+            if target in self.solicited_targets.keys():
+                if pkt.haslayer(ICMPv6NDOptDstLLAddr):
+                    target_mac = pkt[ICMPv6NDOptDstLLAddr].lladdr
+                    self.ip6_neigh[target] = target_mac
+                    log_msg += "[%s], MAC: %s (%s).\n" % (target, target_mac, mac2vendor(target_mac))
+                    if self.solicited_targets[target][0] == True: # DAD
+                        self.candidate_addrs.pop(target)
+                        log_msg += "DAD result: Address [%s] in use." % target
+                    self.solicited_targets.pop(target)
+            else:
+                if pkt[IPv6].dst != "ff02::1":
+                    log_msg += "Alert: suspicious NA packet without NS!"
+            
         # Unexpected Neighbour Solicitation
         # 1. Duplicate Address Detection
         # 2. Request for MAC address
-        #log_msg = "Neighbour Solicitation received.\n"
-        print "Neighbour Solicitation received.\n"
-        if pkt.haslayer(NDOptSrcLLAddr):
-            src_mac = pkt[NDOptSrcLLAddr].lladdr
-            log_msg += "[%s], MAC: %s (%s).\n" % (pkt[IPv6].src, src_mac, mac2vendor(src_mac))
-        
-        if not (pkt[ICMPv6ND_NS].tgt in self.unicast_addrs.values()):
-            log_msg += "Irrelevant NS target [%s].\n" % pkt[ICMPv6ND_NS].tgt
-            self.log.write(log_msg)
-            return
-        
-        if pkt[IPv6].src == "ff02::1" and not pkt.haslayer(NDOptSrcLLAddr):
-            # DAD mechanism
-            # Duplicate Address!
-            # Honeypot occupies the existing MAC?
-            # Shutdown this honeypot, and record it in case of DoS attack against Honeypots.
-            print "Duplicate Address!"
         else:
-            # Request for MAC address, or abnormal request that should elicit an alert.
-            ns = pkt[IPv6]
-            src_type = in6_getAddrType(ns.src)
-            if (src_type & IPV6_ADDR_UNICAST) == IPV6_ADDR_UNICAST:
-                # check(record) MAC address
-                # #response a Neighbour Advertisement
-                reply = Ether(src=self.mac, dst=pkt[Ether].src)/IPv6(dst=pkt[IPv6].src, src=pkt[ICMPv6ND_NS].tgt)/ICMPv6ND_NA(tgt=pkt[ICMPv6ND_NS].tgt)/ICMPv6NDOptSrcLLAddr(lladdr=self.mac)
-                print "reply.summary"
-                #print reply.summary
-                self.send_packet(reply)
+            log_msg = "Neighbour Solicitation received.\n"
+            if pkt.haslayer(ICMPv6NDOptSrcLLAddr):
+                src_mac = pkt[ICMPv6NDOptSrcLLAddr].lladdr
+                log_msg += "[%s], MAC: %s (%s).\n" % (pkt[IPv6].src, src_mac, mac2vendor(src_mac))
+            
+            if pkt[IPv6].src == "ff02::1" and not pkt.haslayer(NDOptSrcLLAddr):
+                # DAD mechanism
+                # Duplicate Address!
+                # Honeypot occupies the existing MAC?
+                # Shutdown this honeypot, and record it in case of DoS attack against Honeypots.
+                log_msg += "Warning: [%s] has been used by MAC: %s" % (pkt[target], pkt[Ether].src)
             else:
-                # record the suspicious attack.
-                print "record the suspicious attack."
+                # Request for MAC address, or abnormal request that should elicit an alert.
+                ns = pkt[IPv6]
+                src_type = in6_getAddrType(ns.src)
+                if (src_type & IPV6_ADDR_UNICAST) == IPV6_ADDR_UNICAST:
+                    # check(record) MAC address
+                    # response a Neighbour Advertisement
+                    reply = Ether(src=self.mac, dst=pkt[Ether].src)/IPv6(dst=pkt[IPv6].src, src=pkt[ICMPv6ND_NS].tgt)/ICMPv6ND_NA(tgt=pkt[ICMPv6ND_NS].tgt)/ICMPv6NDOptSrcLLAddr(lladdr=self.mac)
+                    self.send_packet(reply)
+                else:
+                    # record the suspicious attack.
+                    log_msg += "Alert: Neighbour Solicitation message from non-unicast address."
+        self.log.write(log_msg)
 
     # Handle the received ICMPv6 Echo packets.
     def do_ICMPv6Echo(self, req):
