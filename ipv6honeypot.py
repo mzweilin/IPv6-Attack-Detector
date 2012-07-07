@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import binascii 
 import socket
+import threading
 from scapy.all import *
 import ConfigParser
 from common import config
@@ -261,10 +262,21 @@ class Honeypot:
                 else:
                     self.candidate_addrs[new_addr] = (0, 0)
                     self.send_NDP_NS(new_addr, dad_flag=True)
+                    # Check if the address has been used by other nodes after 5 seconds.
+                    dad_check = threading.Timer(5.0, self.do_DAD, args = [new_addr])
+                    dad_check.start()
         else:
             log_msg += "Warning: Prefix illegal, ignored."
             self.log.write(log_msg)
         return
+        
+    def do_DAD(self, addr):
+        if self.candidate_addrs.has_key(addr):
+            self.unicast_addrs[addr] = self.candidate_addrs[addr]
+            self.candidate_addrs.pop(addr)
+            log_msg = "Added a valid unicast address: [%s]" % addr
+            self.log.write(log_msg)
+        # self.do_NDP() will handle the 'else'
     
     # Add a unicast address to the honeypot.
     # TODO: Handle the router lifetime.
