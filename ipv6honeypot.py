@@ -153,7 +153,7 @@ class Honeypot:
                 return 1
             # send parameter problem message.
             unknown_opt_ptr = str(pkt[IPv6]).find(str(pkt[HBHOptUnknown]))
-            reply = Ether(dst=pkt[Ether].src, src=self.mac)/IPv6(dst=pkt[IPv6].src, src=self.unicast_addrs.items()[0][1])/ICMPv6ParamProblem(code=2, ptr=unknown_opt_ptr)/pkt[IPv6]
+            reply = Ether(dst=pkt[Ether].src, src=self.mac)/IPv6(dst=pkt[IPv6].src, src=self.unicast_addrs.keys()[0])/ICMPv6ParamProblem(code=2, ptr=unknown_opt_ptr)/pkt[IPv6]
             self.send_packet(reply)
             log_msg = "Host discovery by IPv6 invalid extention header.\n"
             log_msg += "From: [%s], MAC: %s (%s)." % (pkt[IPv6].src, pkt[Ether].src, mac2vendor(pkt[Ether].src))
@@ -224,7 +224,7 @@ class Honeypot:
         if req[IPv6].dst != "ff02::1":
             ip6_src = req[IPv6].dst
         else:
-            ip6_src = self.unicast_addrs.items()[0][1] # How to select a source IPv6 address? It's a problem.
+            ip6_src = self.unicast_addrs.keys()[0] # How to select a source IPv6 address? It's a problem.
         echo_id = req[ICMPv6EchoRequest].id
         echo_seq = req[ICMPv6EchoRequest].seq
         echo_data = req[ICMPv6EchoRequest].data
@@ -311,7 +311,7 @@ class Honeypot:
             solic = Ether(dst=mac_dst, src=self.mac)/IPv6(src=ip6_src, dst=ip6_dst)/ICMPv6ND_NS(tgt=target)
             log_msg = "Duplicate Address Detection for [%s]." % target
         else:
-            ip6_src = self.unicast_addrs.items()[0][1]
+            ip6_src = self.unicast_addrs.keys()[0]
             solic = Ether(dst=mac_dst, src=self.mac)/IPv6(src=ip6_src, dst=ip6_dst)/ICMPv6ND_NS(tgt=target)/ICMPv6NDOptSrcLLAddr(lladdr=self.mac)
             log_msg = "Neighbour Solicitation for [%s]." % target 
         self.send_packet(solic)
