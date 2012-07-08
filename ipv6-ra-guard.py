@@ -3,6 +3,7 @@ import socket
 from scapy.all import *
 import md5
 from common import common
+import sys, getopt
 
 class RAguard:
     ras = {}
@@ -32,6 +33,7 @@ class RAguard:
         self.select_genuine_ra()
         print "The genuine Router Advertisement is: "
         self.print_ra(self.genuine_ra)
+        print "\n RA Guard is running..."
         sniff(iface=self.iface, filter="ip6", lfilter = ra_lfilter, prn=self.ra_guard)
             
     # Sniff all RAs and write them in self.ras
@@ -51,10 +53,10 @@ class RAguard:
         
         if self.ras.has_key(md5hash):
             self.ras[md5hash][1] += 1
-            print "+1"
+            #print "+1"
         else:
             self.ras[md5hash] = [ra, 1]
-            print "new"
+            #print "new"
         self.received_ra_flag = True
         return
     
@@ -118,11 +120,28 @@ class RAguard:
         print ""
 
     
-def main():
-    iface = "eth4"
+def main(argv):
+    try:
+        opts, args = getopt.getopt(argv, "hi:", ["help", "interface="])
+    except getopt.GetoptError:
+        usage()
+        sys.exit(2)
+        
+    for opt, arg in opts:
+        if opt in ("-h", "--help"):
+            usage()
+            sys.exit()
+        elif opt in ('-i', "--interface"):
+            iface = arg
+    if 'iface' not in dir():
+        usage()
+        sys.exit()
     
     raguard = RAguard(iface)
     raguard.start()
+    
+def usage():
+    print "sudo ./ipv6-ra-guard.py -i <interface>"
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
