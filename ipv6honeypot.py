@@ -258,11 +258,11 @@ class Honeypot:
         # TODO: Whether the address has been applied.
         if new_addr:
             if self.unicast_addrs.has_key(new_addr):
-                self.unicast_addrs[new_addr] = [timestamp, valid_lifetime, preferred_lifetime]
-                log_msg += "Updated the prefix lifetime."
-                self.log.write(log_msg, 1)
+                time_list = [timestamp, valid_lifetime, preferred_lifetime]
+                self.update_addr(new_addr, time_list)
             else:
                 if self.tentative_addrs.has_key(new_addr):
+                    # DAD on-going.
                     pass
                 else:
                     self.tentative_addrs[new_addr] = [timestamp, valid_lifetime, preferred_lifetime]
@@ -285,11 +285,16 @@ class Honeypot:
         # self.do_NDP() will handle the 'else'
     
     # Add a unicast address to the honeypot.
-    # TODO: Handle the router lifetime.
     def add_addr(self, new_addr, prefix_len, time_list):
+        if self.unicast_addrs.has_key(new_addr):
+            log_msg = "Address [%s] already exists on the interface." % new_addr
+            self.log.write(log_msg)
+            return
         self.unicast_addrs[new_addr] = time_list
         timestamp, valid_lifetime, preferred_lifetime = time_list
-        self.addr_timer[new_addr] = threading.Timer(valid_lifetime, self.del_addr, args = [new_addr])
+        if valid_lifetime != 0xffffffff: # non-infinity time.
+            self.addr_timer[new_addr] = threading.Timer(valid_lifetime, self.del_addr, args = [new_addr])
+            self.addr_timer[new_addr].start()
         self.src_addrs.append(new_addr)
         self.dst_addrs.append(new_addr)
         
@@ -297,12 +302,33 @@ class Honeypot:
         self.log.write(log_msg)
         return
         
+    def update_addr(self, addr, time_list):
+        if not self.unicast_addrs.has_key(addr):
+            return
+        timestamp, valid_lifetime, preferred_lifetime = time_list
+        self.unicast_addrs[addr] = time_list
+        # It may be an infinity address before.
+        if self.addr_timer.has_key(addr):
+            self.addr_timer[addr].cancel()
+            del self.addr_timer[addr]
+        if valid_lifetime != 0xffffffff: # non-infinity time.
+            self.addr_timer[new_addr] = threading.Timer(valid_lifetime, self.del_addr, args = [new_addr])
+            self.addr_timer[new_addr].start()
+        log_msg = "Updated the address [%s]." % addr
+        self.log.write(log_msg, 1)
+        
     def del_addr(self, addr):
-        self.unicast_addrs.pop[addr]
-        self.src_addrs.pop(addr)
-        self.dst_addrs.pop(addr)
-        self.addr_timer.pop(addr)
-        log_msg = "Deleted an expired address: [%s]" % addr
+        if self.unicast_addrs.has_key(addr):
+            del self.unicast_addrs[addr]
+        if self.src_addrs.count(addr) != 0:
+            self.src_addrs.remove(addr)
+        if self.dst_addrs.count(addr) != 0:
+            self.dst_addrs.remove(addr)
+        if self.addr_timer.has_key(addr):
+            self.addr_timer.pop(addr)
+            log_msg = "Deleted an expired address: [%s]" % addr
+        else:
+            log_msg = "Deleted an address: [%s]" % addr
         self.log.write(log_msg)
     
     # Generate a new IPv6 unicast address like [Prefix + interface identifier]/Prefixlen.
@@ -365,8 +391,8 @@ def main():
     log.write("Configuration file <%s> loaded." % conf_file)
     
     vm = Honeypot(config.config, log)
-    static_ip6 = vm.prefix2addr(prefix="2012:dead:beaf:face::", prefix_len=64)
-    time_list = [0,0,0]
+    static_ip6 = vm.prefix2addr(prefix="2012:dead:beef:face::", prefix_len=64)
+    time_list = [0,1800,0]
     vm.add_addr(static_ip6, 64, time_list)
     vm.start()
 
