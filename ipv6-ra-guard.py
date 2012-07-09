@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import socket
+import socket, time
 from scapy.all import *
 import md5
 from common import common
@@ -7,12 +7,16 @@ import sys, getopt
 
 class RAguard:
     ras = {}
-    spoofing_ras = {}
+    spoofing_ras = {} #{ra: counter}
+    spoofing_counter = {} # {timestamp: counter}
     
     mac = '08:00:27:ff:b5:24'
-    lladdr = 'fe80::a00:27ff:feff:b524'
+    lladdr = ''
+    
     genuine_ra = ""
+    genuine_router_addr = ""
     genuine_ra_hash = ""
+    
     received_ra_flag = False
     
     def __init__(self, iface):
@@ -21,6 +25,8 @@ class RAguard:
     def start(self):
         # Send a Router Solicitation to get all Router Advertisement messages.
         # In the future, it can call IPv6 honeypots to send RS message.
+        iface_id = in6_mactoifaceid(self.mac).lower()
+        self.lladdr = "fe80::" + iface_id
         rs = Ether(src=self.mac, dst='33:33:00:00:00:02')/IPv6(src=self.lladdr, dst='ff02::2')/ICMPv6ND_RS()
         timeout = 5
         # Scapy BPF filtering is not working when some exotic interface are used. This includes Virtualbox interface such as vboxnet.
@@ -35,7 +41,7 @@ class RAguard:
         self.print_ra(self.genuine_ra)
         print "\n RA Guard is running..."
         sniff(iface=self.iface, filter="ip6", lfilter = ra_lfilter, prn=self.ra_guard)
-            
+    
     # Sniff all RAs and write them in self.ras
     # The structure of self.ras is,  {md5(ra): [ra, times]}
     def sniff_ra(self,pkt):
@@ -43,7 +49,11 @@ class RAguard:
         if pkt.haslayer(ICMPv6NDOptSrcLLAddr):
             if pkt[Ether].src != pkt.lladdr:
                 return False
+        # Filter RAs to other hosts.
         if not in6_isaddrllallnodes(pkt[IPv6].dst) and not pkt[IPv6].dst == self.lladdr:
+            return False
+        # Filter RAs sent by kill_router6.
+        if not pkt.haslayer(ICMPv6NDOptPrefixInfo):
             return False
         
         ra = pkt[ICMPv6ND_RA]
@@ -68,7 +78,7 @@ class RAguard:
             print "Have selected the unique Router Advertisement as the genuine one."
         else:
             # print all the RAs, and ask a choice.
-            ra_list = []
+            ra_list = [] # List element: 
             for md5hash, (ra, times) in self.ras.items():
                 ra_list.append((md5hash, ra, times))
  
@@ -81,6 +91,8 @@ class RAguard:
                 select_index = int(raw_input("Please select the [index] of the genuine Router Advertisement:"))
             self.genuine_ra = ra_list[select_index][1]
             self.genuine_ra_hash = ra_list[select_index][0]
+            iface_id = in6_mactoifaceid(self.genuine_ra.lladdr).lower()
+            self.genuine_router_addr = "fe80::" + iface_id
             
     # If the received RA doesn't match with the self.genuine_ra, print Alert!
     def ra_guard(self, pkt):
@@ -90,10 +102,37 @@ class RAguard:
         md5hash = md5.md5(str(ra)).hexdigest()
         
         if md5hash != self.genuine_ra_hash:
+            if pkt[IPv6].src == self.genuine_router_addr:
+                # RA spoofing against the genuine router
+                if not ra.haslayer(ICMPv6NDOptPrefixInfo):
+                    # suspicious kill_route6 attack
+                    log_msg = "Alert! Detected kill_router6 attack against the genuine router!"
+                else:
+                    log_msg = "Alert! Detected fake_router6 attack against the genuine router!"
+            elif not ra.haslayer(ICMPv6NDOptPrefixInfo):
+                log_msg = "Warning! Detected invalid kill_router6 attack."
+            else:
+                # fake_route6 attack or flood_route6 attack as a new router
+                log_msg = "Alert! Detected fake_route6 attack as new router!"
+            print log_msg
+            timestamp = int(time.time())
+            if not self.spoofing_counter.has_key(timestamp):
+                self.spoofing_counter[timestamp] = 1
+            else:
+                self.spoofing_counter[timestamp] += 1
+                
+            #print self.spoofing_counter
+            
+            if self.spoofing_counter[timestamp] > 9:
+                print "Alert! Detected flood_router6 attack!"
+                
             if self.spoofing_ras.has_key(md5hash):
                 self.spoofing_ras[md5hash][1] += 1
                 (spoofing_ra, times) = self.spoofing_ras[md5hash]
-                print "%d times received the duplicate RA Spoofing!  Prefix/Len: %s/%d" % (times, spoofing_ra.prefix, spoofing_ra.prefixlen)
+                log_msg = "%d times received the duplicate RA Spoofing!  " % (times)
+                if spoofing_ra.haslayer(ICMPv6NDOptPrefixInfo):
+                    log_msg += "Prefix/Len: %s/%d" % (spoofing_ra.prefix, spoofing_ra.prefixlen)
+                print log_msg
             else:
                 print "New RA Spoofing!"
                 self.spoofing_ras[md5hash] = [ra, 1]
@@ -111,8 +150,7 @@ class RAguard:
         if ra.haslayer(ICMPv6NDOptMTU):
             print ' MTU                      : %d bytes' % ra.mtu
         if ra.haslayer(ICMPv6NDOptPrefixInfo):
-            print ' Prefix                   : %s' % ra.prefix
-            print ' Prefix length            : %d' % ra.prefixlen
+            print ' Prefix                   : %s/%d' % (ra.prefix, ra.prefixlen)
             print '  Valid time              : %d (0x%x) seconds' \
                     % (ra.validlifetime, ra.validlifetime)
             print '  Pref. time              : %d (0x%x) seconds' \
