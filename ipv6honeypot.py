@@ -71,6 +71,9 @@ class Honeypot:
         log_msg += "Unicast address: " + str(self.unicast_addrs.keys())
         self.log.write(log_msg, 0)
         
+        rs = Ether(src=self.mac, dst='33:33:00:00:00:02')/IPv6(src=self.link_local_addr, dst='ff02::2')/ICMPv6ND_RS()
+        self.send_packet(rs)
+        
         ip6_lfilter = lambda (r): IPv6 in r and TCP not in r and UDP not in r
         sniff(iface=self.iface, filter="ip6", lfilter=ip6_lfilter, prn=self.process)
 
@@ -245,7 +248,7 @@ class Honeypot:
         log_msg = "Router Advertisement received.\n"
         if ICMPv6NDOptPrefixInfo not in ra or ICMPv6NDOptSrcLLAddr not in ra:
             log_msg += "Warning: No Prefix or SrcLLAddr, ignored."
-            self.log.write(log_msg)
+            self.log.write(log_msg, 1)
             return
         
         prefix = ra[ICMPv6NDOptPrefixInfo].prefix
