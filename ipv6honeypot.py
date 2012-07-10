@@ -379,6 +379,8 @@ class Honeypot:
         return
     
 def main():
+    # Disabled the Scapy output, such as 'Sent 1 packets.'.
+    conf.verb = 0
     log = logger.Log("test.log")
     log.set_print_level(0)
     
@@ -394,7 +396,7 @@ def main():
     log.write("Configuration file <%s> loaded." % conf_file)
     
     vm = Honeypot(config.config, log)
-    static_ip6 = vm.prefix2addr(prefix="2012:dead:beef:face::", prefix_len=64)
+    static_ip6 = vm.prefix2addr(prefix="2013:dead:beef:face::", prefix_len=64)
     time_list = [0,1800,0]
     vm.add_addr(static_ip6, 64, time_list)
     vm.start()
