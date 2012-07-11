@@ -150,6 +150,7 @@ class RAguard:
         if ra.haslayer(ICMPv6NDOptMTU):
             print ' MTU                      : %d bytes' % ra.mtu
         if ra.haslayer(ICMPv6NDOptPrefixInfo):
+            # TODO: Print the address block information from Regional Internet Registry.
             print ' Prefix                   : %s/%d' % (ra.prefix, ra.prefixlen)
             print '  Valid time              : %d (0x%x) seconds' \
                     % (ra.validlifetime, ra.validlifetime)
@@ -174,6 +175,9 @@ def main(argv):
     if 'iface' not in dir():
         usage()
         sys.exit()
+    
+    # Disabled the Scapy output, such as 'Sent 1 packets.'.
+    conf.verb = 0
     
     raguard = RAguard(iface)
     raguard.start()
