@@ -114,7 +114,16 @@ class Honeypot:
         else:
             if packet[Ether].src == self.mac :
                 if packet[IPv6].src in self.src_addrs:
-                    self.log.write("Spoofing Alert!")
+                    msg = {}
+                    msg['type'] = 'DoS|MitM'
+                    msg['name'] = 'FakePacket'
+                    msg['src'] = packet[IPv6].src
+                    msg['dst'] = packet[IPv6].dst 
+                    msg['util'] = 'Unknown' 
+                    msg['summary'] = 'Unknown'
+                    msg['pcap'] = 'somepcap.pcap'
+                    log_msg = self.build_attack_msg(msg)
+                    self.log.write(log_msg)
                 else:
                     self.log.write("Spoofing Alert! (with non-standard source address)")
                 return 2
@@ -160,8 +169,18 @@ class Honeypot:
             unknown_opt_ptr = str(pkt[IPv6]).find(str(pkt[HBHOptUnknown]))
             reply = Ether(dst=pkt[Ether].src, src=self.mac)/IPv6(dst=pkt[IPv6].src, src=self.unicast_addrs.keys()[0])/ICMPv6ParamProblem(code=2, ptr=unknown_opt_ptr)/pkt[IPv6]
             self.send_packet(reply)
-            log_msg = "Host discovery by IPv6 invalid extention header.\n"
-            log_msg += "From: [%s], MAC: %s (%s)." % (pkt[IPv6].src, pkt[Ether].src, mac2vendor(pkt[Ether].src))
+            
+            msg = {}
+            msg['type'] = 'HostDiscovery'
+            msg['name'] = 'ICMPv6 invalid extension header'
+            msg['mac_src'] = pkt[Ether].src
+            msg['src'] = pkt[IPv6].src
+            msg['dst'] = pkt[IPv6].dst
+            msg['mac_dst'] = pkt[Ether].dst
+            msg['util'] = 'Nmap, THC-IPv6-alive6'
+            msg['summary'] = None
+            msg['pcap'] = None
+            log_msg = self.build_attack_msg(msg)
             self.log.write(log_msg)
             return 1
     
@@ -239,8 +258,18 @@ class Honeypot:
         #print reply.summary
         self.send_packet(reply) 
         
-        log_msg = "ICMPv6 Echo received.\n"
-        log_msg += "From [%s], MAC: %s(%s).\n" % (ip6_dst, ether_dst, mac2vendor(ether_dst))
+        msg = {}
+        msg['type'] = "HostDiscovery"
+        msg['name'] = "ICMPv6 Echo Ping"
+        msg['src'] = req[IPv6].src
+        msg['mac_src'] = req[Ether].src
+        msg['dst'] = req[IPv6].dst
+        msg['mac_dst'] = req[Ether].dst
+        msg['util'] = "Ping, Nmap, THC-IPv6-alive6"
+        msg['pkt'] = "None"
+        msg['summary'] = "None"
+        
+        log_msg = self.build_attack_msg(msg)
         self.log.write(log_msg)
         return
         
@@ -377,6 +406,20 @@ class Honeypot:
     
     def dhcpv6(self, req):
         return
+        
+    def build_attack_msg(self, attack):
+        timestamp = time.time()
+        log_msg = "[Attack Detected]\n"
+        log_msg += "Timestamp: %s\n" % timestamp
+        log_msg += "Type: %s\n" % attack['type']
+        log_msg += "Name: %s\n" % attack['name']
+        log_msg += "From: [%s]\n      MAC: %s (%s)\n" % (attack['src'], attack['mac_src'], mac2vendor(attack['mac_src']))
+        log_msg += "To: [%s]\n    MAC: %s (%s)\n" % (attack['dst'], attack['mac_dst'], mac2vendor(attack['mac_dst']))
+        log_msg += "Utility: %s\n" % attack['util']
+        log_msg += "Packet: %s\n" % attack['pcap']
+        log_msg += "Summary: %s\n" % attack['summary']
+        return log_msg
+        
     
 def main():
     # Disabled the Scapy output, such as 'Sent 1 packets.'.
