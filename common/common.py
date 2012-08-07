@@ -2,7 +2,7 @@ from scapy.all import *
 import re
 import random
 
-__all__ = ["mac2vendor", "verify_cksum", "inet_ntop6", "inet_pton6"]
+__all__ = ["mac2vendor", "vendor2mac", "vendor2mac_ia", "verify_cksum", "inet_ntop6", "inet_pton6"]
 
 # Initiate the OUI list.
 # OUI is short for 'Organizationally Unique Identifier'. We can learn the vendor of a network adapter from its MAC by the OUI list.
