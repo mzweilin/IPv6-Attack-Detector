@@ -10,7 +10,7 @@ __all__ = ["mac2vendor", "verify_cksum", "inet_ntop6", "inet_pton6"]
 #simple_oui = open('./common/simple_oui.txt', 'r')
 simple_oui = open('./simple_oui.txt', 'r')
 oui_dict = {} # MAC prefix ==> Vendor
-oui_rdict = {} # vendor.lower() ==> (vendor.native(), MAC prefixES LIST)
+oui_rdict = {} # vendor ==> MAC prefixES LIST
 
 line = simple_oui.readline()
 while line != '':
@@ -18,14 +18,16 @@ while line != '':
     paring[1] = paring[1][:-1] # Delete the '\n'
     oui_dict[paring[0]] = paring[1]
     if oui_rdict.has_key(paring[1]):
-        oui_rdict[paring[1].lower()][1].append(paring[0])
+        oui_rdict[paring[1]].append(paring[0])
     else:
-        oui_rdict[paring[1].lower()] = (paring[1], [paring[0]])
+        oui_rdict[paring[1]] = [paring[0]]
     line = simple_oui.readline()
 mac_pattern = r'^[0-9A-F]{2}\:[0-9A-F]{2}\:[0-9A-F]{2}\:[0-9A-F]{2}\:[0-9A-F]{2}\:[0-9A-F]{2}$'
 mac_reg = re.compile(mac_pattern)
 
 def mac2vendor(mac):
+    if mac == None:
+        return None
     mac = mac.upper()
     match = mac_reg.match(mac)
     if match == None:
@@ -36,42 +38,52 @@ def mac2vendor(mac):
     else:
         return None
 
-def vendor2mac(vendor):
+# Return a random mac address with specified prefix.
+def prefix2mac(prefix):
     hex_str = "0123456789ABCDEF"
-    # First char Upper, all upper, all lower
-    vendor = vendor.lower()
-    for key in oui_rdict.keys():
-        if key.find(vendor) != -1:
-            # get a mac prefix
-            print oui_rdict[key][1]
-            prefix = random.choice(oui_rdict[key][1])
-            print prefix
-            mac = ""
-            for i in range(0, 6, 2):
-                mac += prefix[i:i+2] + ":"
-            for i in range(0, 3):
-                mac += random.choice(hex_str) + random.choice(hex_str)
-                if i != 2:
-                    mac += ':'
-            return mac
-    return None
+    mac = ""
+    for i in range(0, 6, 2):
+        mac += prefix[i:i+2] + ":"
+    for i in range(0, 3):
+        mac += random.choice(hex_str) + random.choice(hex_str)
+        if i != 2:
+            mac += ':'
+    return mac
+
+def vendor2mac(vendor):
+    if not oui_rdict.has_key(vendor):
+        return None
+    prefix = random.choice(oui_rdict[vendor])
+    return prefix2mac(prefix)
 
 # interactive mode of vendor2mac()
 def vendor2mac_ia(keyword):
+    pattern = r'\b%s\b' % keyword
     can_list = []
     for vendor in oui_rdict.keys():
-        if vendor.find(keyword) != -1:
+        match = re.match(pattern, vendor, re.IGNORECASE)
+        if match == None:
+            continue
+        else:
             can_list.append(vendor)
+    
     if len(can_list) == 0:
         return None
     if len(can_list) == 1:
-        return vendor2mac(keyword)
-    print "\nWhat's your mean when specifying \"%s\"?" % keyword
+        return vendor2mac(can_list[0])
+    print "\nWhat do you mean when specifying \"%s\"?" % keyword
     for i in range(0, len(can_list)):
-        print "%d. %s" % (i, oui_rdict[can_list[i]][0])
+        print "%d. %s" % (i, can_list[i])
+    print "%d. All of the above." % len(can_list)
     choice = -1
-    while choice<0 or choice>len(can_list)-1:
+    while choice<0 or choice>len(can_list):
         choice = int(raw_input("Please input the index number: "))
+    if choice == len(can_list):
+        prefix_list = []
+        for key in can_list:
+            prefix_list.extend(oui_rdict[key])
+        prefix = random.choice(prefix_list)
+        return prefix2mac(prefix)
     return vendor2mac(can_list[choice])
 
 # Verify the checksum of packets.
