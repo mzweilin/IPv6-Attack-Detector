@@ -46,7 +46,7 @@ class Honeypot(threading.Thread):
         threading.Thread.__init__(self)
         log_file = "./log/%s.log" % config['name'] 
         self.log = logger.Log(log_file)
-        self.log.set_print_level(0)
+        self.log.set_print_level(1)
         
         self.mac = config['mac']
         self.config = config
@@ -74,7 +74,7 @@ class Honeypot(threading.Thread):
         log_msg += "MAC: %s (%s)\n" % (self.mac, mac2vendor(self.mac))
         log_msg += "Link-local address: %s\n" % self.link_local_addr
         log_msg += "Unicast address: " + str(self.unicast_addrs.keys()) + "\n"
-        self.log.write(log_msg, 0)
+        self.log.info(log_msg)
         
         rs = Ether(src=self.mac, dst='33:33:00:00:00:02')/IPv6(src=self.link_local_addr, dst='ff02::2')/ICMPv6ND_RS()
         self.send_packet(rs)
@@ -114,7 +114,7 @@ class Honeypot(threading.Thread):
                 self.sent_sigs[sig] = self.sent_sigs[sig] -1
                 return 1
             #else:
-                #self.log.write("Duplicate spoofing Alert!")
+                #self.log.info("Duplicate spoofing Alert!")
                 #return 2
         else:
             if packet[Ether].src == self.mac or packet[IPv6].src != "::" and packet[IPv6].src in self.src_addrs:
@@ -129,7 +129,7 @@ class Honeypot(threading.Thread):
                 msg['summary'] = 'Unknown'
                 msg['pcap'] = 'somepcap.pcap'
                 log_msg = self.build_attack_msg(msg)
-                self.log.write(log_msg)
+                self.log.info(log_msg)
                 return 2
         return 0
 
@@ -145,8 +145,8 @@ class Honeypot(threading.Thread):
         else:
             self.sent_sigs[sig] = 1
         sendp(packet, iface=self.iface)
-        self.log.write("Sent 1 packet: %s" % packet.summary(), 2)
-        self.log.write("Packet hex: %s" % sig, 2)
+        self.log.debug("Sent 1 packet: %s" % packet.summary())
+        self.log.debug("Packet hex: %s" % sig)
         
     # Handle the IPv6 invalid extention header options. (One of Nmap's host discovery technique.)
     # ret: 0: Valid extension header, need further processing.
@@ -180,7 +180,7 @@ class Honeypot(threading.Thread):
             msg['summary'] = None
             msg['pcap'] = None
             log_msg = self.build_attack_msg(msg)
-            self.log.write(log_msg)
+            self.log.info(log_msg)
             if len(self.unicast_addrs) == 0:
                 return 1
             # send parameter problem message.
@@ -239,7 +239,7 @@ class Honeypot(threading.Thread):
                 else:
                     # record the suspicious attack.
                     log_msg += "Alert: Neighbour Solicitation message from non-unicast address."
-        self.log.write(log_msg)
+        self.log.info(log_msg)
 
     # Handle the received ICMPv6 Echo packets.
     def do_ICMPv6Echo(self, req):
@@ -275,14 +275,14 @@ class Honeypot(threading.Thread):
         msg['summary'] = "None"
         
         log_msg = self.build_attack_msg(msg)
-        self.log.write(log_msg)
+        self.log.info(log_msg)
         return
         
     def do_slaac(self, ra):
         log_msg = "Router Advertisement received.\n"
         if ICMPv6NDOptPrefixInfo not in ra or ICMPv6NDOptSrcLLAddr not in ra:
             log_msg += "Warning: No Prefix or SrcLLAddr, ignored."
-            self.log.write(log_msg, 1)
+            self.log.debug(log_msg, 1)
             return
         
         prefix = ra[ICMPv6NDOptPrefixInfo].prefix
@@ -309,7 +309,7 @@ class Honeypot(threading.Thread):
                     dad_check.start()
         else:
             log_msg += "Warning: Prefix illegal, ignored."
-            self.log.write(log_msg)
+            self.log.info(log_msg)
         return
         
     def do_DAD(self, addr):
@@ -318,14 +318,14 @@ class Honeypot(threading.Thread):
             self.add_addr(addr, 64, time_list)
             self.tentative_addrs.pop(addr)
             log_msg = "DAD completed."
-            self.log.write(log_msg)
+            self.log.info(log_msg)
         # self.do_NDP() will handle the 'else'
     
     # Add a unicast address to the honeypot.
     def add_addr(self, new_addr, prefix_len, time_list):
         if self.unicast_addrs.has_key(new_addr):
             log_msg = "Address [%s] already exists on the interface." % new_addr
-            self.log.write(log_msg)
+            self.log.info(log_msg)
             return
         self.unicast_addrs[new_addr] = time_list
         timestamp, valid_lifetime, preferred_lifetime = time_list
@@ -336,7 +336,7 @@ class Honeypot(threading.Thread):
         self.dst_addrs.append(new_addr)
         
         log_msg = "Add a new address: %s/%d" % (new_addr, prefix_len)
-        self.log.write(log_msg)
+        self.log.info(log_msg)
         return
         
     def update_addr(self, addr, time_list):
@@ -352,7 +352,7 @@ class Honeypot(threading.Thread):
             self.addr_timer[new_addr] = threading.Timer(valid_lifetime, self.del_addr, args = [new_addr])
             self.addr_timer[new_addr].start()
         log_msg = "Updated the address [%s]." % addr
-        self.log.write(log_msg, 1)
+        self.log.debug(log_msg)
         
     def del_addr(self, addr):
         if self.unicast_addrs.has_key(addr):
@@ -366,7 +366,7 @@ class Honeypot(threading.Thread):
             log_msg = "Deleted an expired address: [%s]" % addr
         else:
             log_msg = "Deleted an address: [%s]" % addr
-        self.log.write(log_msg)
+        self.log.info(log_msg)
     
     # Generate a new IPv6 unicast address like [Prefix + interface identifier]/Prefixlen.
     def prefix2addr(self, prefix, prefix_len):
@@ -377,7 +377,7 @@ class Honeypot(threading.Thread):
         if prefix_len != 64:
             log_msg = "Warning: Prefix length is not equal to 64.\n"
             log_msg += "Prefix: %s/%d" % (prefix, prefix_len)
-            self.log.write(log_msg, 0)
+            self.log.debug(log_msg)
             return None
         prefix_n = inet_pton6(prefix)
         iface_id_n = inet_pton6("::"+self.iface_id)
@@ -406,7 +406,7 @@ class Honeypot(threading.Thread):
             solic = Ether(dst=mac_dst, src=self.mac)/IPv6(src=ip6_src, dst=ip6_dst)/ICMPv6ND_NS(tgt=target)/ICMPv6NDOptSrcLLAddr(lladdr=self.mac)
             log_msg = "Neighbour Solicitation for [%s]." % target 
         self.send_packet(solic)
-        self.log.write(log_msg)
+        self.log.info(log_msg)
         return
     
     def dhcpv6(self, req):
@@ -430,7 +430,7 @@ def main():
     # Disabled the Scapy output, such as 'Sent 1 packets.'.
     conf.verb = 0
     system_log = logger.Log("./log/system.log")
-    system_log.set_print_level(0)
+    system_log.set_print_level(1)
     
     # Loading the configuration files of honeypot. 
     confdir = './conf'
@@ -447,7 +447,7 @@ def main():
                 except config.ParsingError, err:
                     print str(err)
                     sys.exit(1)
-                system_log.write("Configuration file <%s> loaded." % conf_file)
+                system_log.info("Configuration file <%s> loaded." % conf_file)
                 
                 honeypot_cfg = config.config.copy()
                 config.config.clear()
@@ -461,7 +461,7 @@ def main():
                 hp.start()
     
     try:
-        raw_input()
+        raw_input("Honeypots are running...\n")
     except KeyboardInterrupt:
         for hp in honeypots:
             if hp.isAlive():
