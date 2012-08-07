@@ -113,24 +113,23 @@ class Honeypot(threading.Thread):
             if self.sent_sigs[sig] >= 1:
                 self.sent_sigs[sig] = self.sent_sigs[sig] -1
                 return 1
-            else:
-                self.log.write("Duplicate spoofing Alert!")
-                return 2
+            #else:
+                #self.log.write("Duplicate spoofing Alert!")
+                #return 2
         else:
-            if packet[Ether].src == self.mac :
-                if packet[IPv6].src in self.src_addrs:
-                    msg = {}
-                    msg['type'] = 'DoS|MitM'
-                    msg['name'] = 'FakePacket'
-                    msg['src'] = packet[IPv6].src
-                    msg['dst'] = packet[IPv6].dst 
-                    msg['util'] = 'Unknown' 
-                    msg['summary'] = 'Unknown'
-                    msg['pcap'] = 'somepcap.pcap'
-                    log_msg = self.build_attack_msg(msg)
-                    self.log.write(log_msg)
-                else:
-                    self.log.write("Spoofing Alert! (with non-standard source address)")
+            if packet[Ether].src == self.mac or packet[IPv6].src != "::" and packet[IPv6].src in self.src_addrs:
+                msg = {}
+                msg['type'] = 'DoS|MitM'
+                msg['name'] = 'FakePacket'
+                msg['src'] = packet[IPv6].src
+                msg['dst'] = packet[IPv6].dst 
+                msg['mac_src'] = packet[Ether].src
+                msg['mac_dst'] = packet[Ether].dst
+                msg['util'] = 'Unknown' 
+                msg['summary'] = 'Unknown'
+                msg['pcap'] = 'somepcap.pcap'
+                log_msg = self.build_attack_msg(msg)
+                self.log.write(log_msg)
                 return 2
         return 0
 
@@ -464,6 +463,9 @@ def main():
     try:
         raw_input()
     except KeyboardInterrupt:
+        for hp in honeypots:
+            if hp.isAlive():
+                hp.log.close()
         system_log.close()
 
 if __name__ == "__main__":
