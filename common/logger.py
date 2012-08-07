@@ -2,7 +2,7 @@ import time
 
 class Log:
     print_level = 0
-    msg_level = {0: 'DEBUG', 1: 'INFO', 2: 'WARNING', 3: 'ERROR', 4: 'CRITICAL'}
+    msg_level = {0: 'DEBUG', 1: 'INFO', 2: 'WARNING', 3: 'ALERT'}
     
     def __init__(self, filename):
         self.filename = filename
@@ -22,10 +22,8 @@ class Log:
         self.write(msg, 1)
     def warnning(self, msg):
         self.write(msg, 2)
-    def error(self, msg):
+    def alert(self, msg):
         self.write(msg, 3)
-    def critical(self, msg):
-        self.write(msg, 4)
             
     def set_print_level(self, level):
         self.print_level = level

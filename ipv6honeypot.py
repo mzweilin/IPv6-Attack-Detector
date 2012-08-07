@@ -179,8 +179,8 @@ class Honeypot(threading.Thread):
             msg['util'] = 'Nmap, THC-IPv6-alive6'
             msg['summary'] = None
             msg['pcap'] = None
-            log_msg = self.build_attack_msg(msg)
-            self.log.info(log_msg)
+            attack_msg = self.build_attack_msg(msg)
+            self.log.alert(attack_msg)
             if len(self.unicast_addrs) == 0:
                 return 1
             # send parameter problem message.
@@ -220,13 +220,17 @@ class Honeypot(threading.Thread):
             if pkt.haslayer(ICMPv6NDOptSrcLLAddr):
                 src_mac = pkt[ICMPv6NDOptSrcLLAddr].lladdr
                 log_msg += "[%s], MAC: %s (%s).\n" % (pkt[IPv6].src, src_mac, mac2vendor(src_mac))
+                #TODO: I plan to ignore the message here, and collect the global IP-MAC paring in a central monitor program.
             
             if pkt[IPv6].src == "ff02::1" and not pkt.haslayer(NDOptSrcLLAddr):
                 # DAD mechanism
                 # Duplicate Address!
                 # Honeypot occupies the existing MAC?
                 # Shutdown this honeypot, and record it in case of DoS attack against Honeypots.
-                log_msg += "Warning: [%s] has been used by MAC: %s" % (pkt[target], pkt[Ether].src)
+                log_msg += "[%s] has been used by MAC: %s" % (pkt[target], pkt[Ether].src)
+                self.log.warning(log_msg)
+                return
+                #TODO: delete the address, and report it to the central system, in order to detect dos-new-ip6 attack.
             else:
                 # Request for MAC address, or abnormal request that should elicit an alert.
                 ns = pkt[IPv6]
@@ -234,17 +238,32 @@ class Honeypot(threading.Thread):
                 if (src_type & IPV6_ADDR_UNICAST) == IPV6_ADDR_UNICAST:
                     # check(record) MAC address
                     # response a Neighbour Advertisement
-                    reply = Ether(src=self.mac, dst=pkt[Ether].src)/IPv6(dst=pkt[IPv6].src, src=pkt[ICMPv6ND_NS].tgt)/ICMPv6ND_NA(tgt=pkt[ICMPv6ND_NS].tgt)/ICMPv6NDOptSrcLLAddr(lladdr=self.mac)
+                    reply = Ether(src=self.mac, dst=pkt[Ether].src)/IPv6(dst=pkt[IPv6].src, src=pkt[ICMPv6ND_NS].tgt)/ICMPv6ND_NA(tgt=pkt[ICMPv6ND_NS].tgt)/ICMPv6NDOptDstLLAddr(lladdr=self.mac)
                     self.send_packet(reply)
-                else:
-                    # record the suspicious attack.
-                    log_msg += "Alert: Neighbour Solicitation message from non-unicast address."
-        self.log.info(log_msg)
+        self.log.debug(log_msg)
 
     # Handle the received ICMPv6 Echo packets.
     def do_ICMPv6Echo(self, req):
         #print "do_ICMPv6Echo(), receved: "
         #print req.summary
+        if req[IPv6].dst != "ff02::1":
+            msg = {}
+            msg['type'] = "HostDiscovery"
+            msg['name'] = "ICMPv6 Echo Ping"
+            msg['src'] = req[IPv6].src
+            msg['mac_src'] = req[Ether].src
+            msg['dst'] = req[IPv6].dst
+            msg['mac_dst'] = req[Ether].dst
+            msg['util'] = "Ping, Nmap, THC-IPv6-alive6"
+            msg['pkt'] = "None"
+            msg['summary'] = "None"
+            
+            attack_msg = self.build_attack_msg(msg)
+            self.log.alert(attack_msg)
+        
+        # Don't reply an echo withourt unicast address. 
+        if len(self.unicast_addrs.keys()) == 0:
+            return
         
         ether_dst = req[Ether].src
         ether_src = self.mac
@@ -261,29 +280,31 @@ class Honeypot(threading.Thread):
         reply = Ether(src=ether_src, dst=ether_dst)/IPv6(dst=ip6_dst, src=ip6_src)/ICMPv6EchoReply(id=echo_id, seq=echo_seq, data=echo_data)
         #print "Echo Reply summary:"
         #print reply.summary
-        self.send_packet(reply) 
-        
-        msg = {}
-        msg['type'] = "HostDiscovery"
-        msg['name'] = "ICMPv6 Echo Ping"
-        msg['src'] = req[IPv6].src
-        msg['mac_src'] = req[Ether].src
-        msg['dst'] = req[IPv6].dst
-        msg['mac_dst'] = req[Ether].dst
-        msg['util'] = "Ping, Nmap, THC-IPv6-alive6"
-        msg['pkt'] = "None"
-        msg['summary'] = "None"
-        
-        log_msg = self.build_attack_msg(msg)
-        self.log.info(log_msg)
+        self.send_packet(reply)
         return
         
     def do_slaac(self, ra):
         log_msg = "Router Advertisement received.\n"
         if ICMPv6NDOptPrefixInfo not in ra or ICMPv6NDOptSrcLLAddr not in ra:
-            log_msg += "Warning: No Prefix or SrcLLAddr, ignored."
-            self.log.debug(log_msg, 1)
+            log_msg += "No Prefix or SrcLLAddr, ignored."
+            self.log.debug(log_msg)
             return
+        
+        #TODO: I plan to detect such global attack in a central monitor program, rather than in each honeypot.
+        if ra[ICMPv6ND_RA].routerlifetime == 0:
+            # SLAAC for host discovery.
+            msg = {}
+            msg['type'] = "HostDiscovery"
+            msg['name'] = "ICMPv6 SLAAC-based"
+            msg['src'] = ra[IPv6].src
+            msg['mac_src'] = ra[Ether].src
+            msg['dst'] = ra[IPv6].dst
+            msg['mac_dst'] = ra[Ether].dst
+            msg['util'] = "Nmap"
+            msg['pcap'] = "None"
+            msg['summary'] = "None"
+            attack_msg = self.build_attack_msg(msg)
+            self.log.alert(attack_msg)
         
         prefix = ra[ICMPv6NDOptPrefixInfo].prefix
         prefix_len = ra[ICMPv6NDOptPrefixInfo].prefixlen
@@ -318,7 +339,7 @@ class Honeypot(threading.Thread):
             self.add_addr(addr, 64, time_list)
             self.tentative_addrs.pop(addr)
             log_msg = "DAD completed."
-            self.log.info(log_msg)
+            self.log.debug(log_msg)
         # self.do_NDP() will handle the 'else'
     
     # Add a unicast address to the honeypot.
@@ -336,7 +357,7 @@ class Honeypot(threading.Thread):
         self.dst_addrs.append(new_addr)
         
         log_msg = "Add a new address: %s/%d" % (new_addr, prefix_len)
-        self.log.info(log_msg)
+        self.log.debug(log_msg)
         return
         
     def update_addr(self, addr, time_list):
@@ -366,7 +387,7 @@ class Honeypot(threading.Thread):
             log_msg = "Deleted an expired address: [%s]" % addr
         else:
             log_msg = "Deleted an address: [%s]" % addr
-        self.log.info(log_msg)
+        self.log.debug(log_msg)
     
     # Generate a new IPv6 unicast address like [Prefix + interface identifier]/Prefixlen.
     def prefix2addr(self, prefix, prefix_len):
@@ -406,7 +427,7 @@ class Honeypot(threading.Thread):
             solic = Ether(dst=mac_dst, src=self.mac)/IPv6(src=ip6_src, dst=ip6_dst)/ICMPv6ND_NS(tgt=target)/ICMPv6NDOptSrcLLAddr(lladdr=self.mac)
             log_msg = "Neighbour Solicitation for [%s]." % target 
         self.send_packet(solic)
-        self.log.info(log_msg)
+        self.log.debug(log_msg)
         return
     
     def dhcpv6(self, req):
