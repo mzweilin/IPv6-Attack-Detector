@@ -17,4 +17,7 @@ class Log:
             
     def set_print_level(self, level):
         self.print_level = level
+        
+    def close(self):
+        self.log.close()
 

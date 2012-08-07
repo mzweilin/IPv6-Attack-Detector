@@ -1,4 +1,5 @@
 [main]
+name = ipv6-honeypot-test
 interface = eth5
 mac = ab:cd:ef:12:34:56
 

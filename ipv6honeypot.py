@@ -41,8 +41,11 @@ class Honeypot:
     # {target_ip6:(mac)}
     ip6_neigh = {}
     
-    def __init__(self, config, log):
-        self.log = log
+    def __init__(self, config):
+        log_file = "./log/%s.log" % config['name'] 
+        self.log = logger.Log(log_file)
+        self.log.set_print_level(0)
+        
         self.mac = config['mac']
         self.config = config
         self.iface = config['iface']
@@ -64,7 +67,7 @@ class Honeypot:
         self.dst_addrs.append(self.all_nodes_addr)
         
     def start(self):
-        log_msg = "===Initiated an IPv6 Low-interaction Honeypot.===\n"
+        log_msg = " ===%s initiated.===\n" % self.config['name']
         log_msg += "Interface: %s\n" % self.iface
         log_msg += "MAC: %s\n" % self.mac
         log_msg += "Link-local address: %s\n" % self.link_local_addr
@@ -424,8 +427,8 @@ class Honeypot:
 def main():
     # Disabled the Scapy output, such as 'Sent 1 packets.'.
     conf.verb = 0
-    log = logger.Log("test.log")
-    log.set_print_level(0)
+    system_log = logger.Log("./log/system.log")
+    system_log.set_print_level(0)
     
     conf_file = "./conf/honeypot.ini"
     cfg = ConfigParser.SafeConfigParser()
@@ -436,13 +439,15 @@ def main():
         print str(err)
         sys.exit(1)
     
-    log.write("Configuration file <%s> loaded." % conf_file)
+    system_log.write("Configuration file <%s> loaded." % conf_file)
     
-    vm = Honeypot(config.config, log)
+    vm = Honeypot(config.config)
     static_ip6 = vm.prefix2addr(prefix="2013:dead:beef:face::", prefix_len=64)
     time_list = [0,1800,0]
     vm.add_addr(static_ip6, 64, time_list)
     vm.start()
+    
+    system_log.close()
 
 if __name__ == "__main__":
     main()
