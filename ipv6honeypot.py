@@ -329,8 +329,8 @@ class Honeypot(threading.Thread):
                     dad_check = threading.Timer(5.0, self.do_DAD, args = [new_addr])
                     dad_check.start()
         else:
-            log_msg += "Warning: Prefix illegal, ignored."
-            self.log.info(log_msg)
+            log_msg += "Prefix illegal, ignored."
+            self.log.warning(log_msg)
         return
         
     def do_DAD(self, addr):
@@ -396,9 +396,9 @@ class Honeypot(threading.Thread):
         # does not equal 128 bits, the Prefix Information option MUST be
         # ignored.
         if prefix_len != 64:
-            log_msg = "Warning: Prefix length is not equal to 64.\n"
+            log_msg = "Prefix length is not equal to 64.\n"
             log_msg += "Prefix: %s/%d" % (prefix, prefix_len)
-            self.log.debug(log_msg)
+            self.log.warning(log_msg)
             return None
         prefix_n = inet_pton6(prefix)
         iface_id_n = inet_pton6("::"+self.iface_id)
