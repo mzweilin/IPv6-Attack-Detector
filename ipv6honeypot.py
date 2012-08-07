@@ -432,10 +432,10 @@ def main():
     system_log = logger.Log("./log/system.log")
     system_log.set_print_level(0)
     
+    # Loading the configuration files of honeypot. 
     confdir = './conf'
     cfg = ConfigParser.SafeConfigParser()
     honeypots = []
-    
     for parent, dirnames, filenames in os.walk(confdir):
         for filename in filenames:
             split_name = filename.split('.')
