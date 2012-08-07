@@ -7,8 +7,7 @@ __all__ = ["mac2vendor", "verify_cksum", "inet_ntop6", "inet_pton6"]
 # Initiate the OUI list.
 # OUI is short for 'Organizationally Unique Identifier'. We can learn the vendor of a network adapter from its MAC by the OUI list.
 # The vendors' data is from http://standards.ieee.org/develop/regauth/oui/oui.txt on 2012/6/29, and it has been simplified for the release of IPv6 attack detector.
-#simple_oui = open('./common/simple_oui.txt', 'r')
-simple_oui = open('./simple_oui.txt', 'r')
+simple_oui = open('./common/simple_oui.txt', 'r')
 oui_dict = {} # MAC prefix ==> Vendor
 oui_rdict = {} # vendor ==> MAC prefixES LIST
 
@@ -57,9 +56,12 @@ def vendor2mac(vendor):
     return prefix2mac(prefix)
 
 # interactive mode of vendor2mac()
-def vendor2mac_ia(keyword):
+# When quantity==1, return a mac; 
+# When quantity>1, return a mac list.
+def vendor2mac_ia(keyword, quantity = 1):
     pattern = r'\b%s\b' % keyword
     can_list = []
+    mac_list = []
     for vendor in oui_rdict.keys():
         match = re.match(pattern, vendor, re.IGNORECASE)
         if match == None:
@@ -69,22 +71,27 @@ def vendor2mac_ia(keyword):
     
     if len(can_list) == 0:
         return None
-    if len(can_list) == 1:
+    if len(can_list) != 1:
+        print "\nWhat do you mean when specifying \"%s\"?" % keyword
+        for i in range(0, len(can_list)):
+            print "%d. %s" % (i, can_list[i])
+        print "%d. All of the above." % len(can_list)
+        choice = -1
+        while choice<0 or choice>len(can_list):
+            choice = int(raw_input("Please input the index number: "))
+        if choice == len(can_list):
+            prefix_list = []
+            for key in can_list:
+                prefix_list.extend(oui_rdict[key])
+                
+    if quantity == 1:
         return vendor2mac(can_list[0])
-    print "\nWhat do you mean when specifying \"%s\"?" % keyword
-    for i in range(0, len(can_list)):
-        print "%d. %s" % (i, can_list[i])
-    print "%d. All of the above." % len(can_list)
-    choice = -1
-    while choice<0 or choice>len(can_list):
-        choice = int(raw_input("Please input the index number: "))
-    if choice == len(can_list):
-        prefix_list = []
-        for key in can_list:
-            prefix_list.extend(oui_rdict[key])
+    
+    for i in range(0, quantity):
         prefix = random.choice(prefix_list)
-        return prefix2mac(prefix)
-    return vendor2mac(can_list[choice])
+        mac_list.append(prefix2mac(prefix))
+    
+    return mac_list
 
 # Verify the checksum of packets.
 def verify_cksum(pkt):
@@ -119,6 +126,11 @@ def test():
     mac = vendor2mac_ia('zte')
     print mac
     print mac2vendor(mac)
+    
+    mac_list = vendor2mac_ia('samsung', 5)
+    for mac in mac_list:
+        print mac
+        print mac2vendor(mac)
     
 if __name__ == "__main__":
     test()
