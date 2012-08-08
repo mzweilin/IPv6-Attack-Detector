@@ -128,7 +128,7 @@ class Honeypot(threading.Thread):
         else:
             if packet[Ether].src == self.mac or packet[IPv6].src != "::" and packet[IPv6].src in self.src_addrs:
                 msg = {}
-                msg['time'] = packet.time
+                msg['timestamp'] = packet.time
                 msg['type'] = 'DoS|MitM'
                 msg['name'] = 'FakePacket'
                 msg['src'] = packet[IPv6].src
@@ -180,6 +180,7 @@ class Honeypot(threading.Thread):
             elif pkt[HBHOptUnknown].otype & 0x80 != 0x80:
                 return 1
             msg = {}
+            msg['timestamp'] = pkt.time
             msg['type'] = 'HostDiscovery'
             msg['name'] = 'ICMPv6 invalid extension header'
             msg['mac_src'] = pkt[Ether].src
@@ -257,6 +258,7 @@ class Honeypot(threading.Thread):
         #print req.summary
         if req[IPv6].dst != "ff02::1":
             msg = {}
+            msg['timestamp'] = req.time
             msg['type'] = "HostDiscovery"
             msg['name'] = "ICMPv6 Echo Ping"
             msg['src'] = req[IPv6].src
@@ -443,9 +445,8 @@ class Honeypot(threading.Thread):
         return
         
     def build_attack_msg(self, attack):
-        timestamp = time.time()
         log_msg = "[Attack Detected]\n"
-        log_msg += "Timestamp: %s\n" % timestamp
+        log_msg += "Timestamp: %s\n" % attack['timestamp']
         log_msg += "Type: %s\n" % attack['type']
         log_msg += "Name: %s\n" % attack['name']
         log_msg += "From: [%s]\n      MAC: %s (%s)\n" % (attack['src'], attack['mac_src'], mac2vendor(attack['mac_src']))
