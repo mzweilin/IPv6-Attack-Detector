@@ -473,8 +473,8 @@ def main():
                 honeypot_cfg = config.config.copy()
                 config.config.clear()
                 
-                honeypots.append(Honeypot(honeypot_cfg))
-                hp = honeypots[len(honeypots)-1]
+                hp = Honeypot(honeypot_cfg)
+                honeypots.append(hp)
                 hp.setDaemon(True)
                 static_ip6 = hp.prefix2addr(prefix="2013:dead:beef:face::", prefix_len=64)
                 time_list = [0,1800,0]
