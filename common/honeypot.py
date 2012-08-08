@@ -124,6 +124,8 @@ class Honeypot(threading.Thread):
             self.do_ICMPv6Echo(pkt)
         elif self.config['slaac'] == 1 and ICMPv6ND_RA in pkt:
             self.do_slaac(pkt)
+        else:
+            self.handle_attack(pkt)
         return
     
     # Check up the recevied packets.
@@ -281,7 +283,7 @@ class Honeypot(threading.Thread):
             msg['dst'] = req[IPv6].dst
             msg['mac_dst'] = req[Ether].dst
             msg['util'] = "Ping, Nmap, THC-IPv6-alive6"
-            msg['pkt'] = self.save_pcap(msg, req)
+            msg['pcap'] = self.save_pcap(msg, req)
             self.put_attack(msg)
         
         # Don't reply an echo withourt unicast address. 
@@ -465,6 +467,20 @@ class Honeypot(threading.Thread):
         log_msg += "Packets: %s\n" % attack['pcap']
         return log_msg
         
+    def handle_attack(self, pkt):
+        # redir6 attack
+        if ICMPv6ND_Redirect in pkt:
+            msg = {}
+            msg['timestamp'] = pkt.time
+            msg['type'] = 'MitM | DoS'
+            msg['name'] = 'ICMPv6 Redirect'
+            msg['mac_src'] = pkt[Ether].src
+            msg['src'] = pkt[IPv6].src
+            msg['dst'] = pkt[IPv6].dst
+            msg['mac_dst'] = pkt[Ether].dst
+            msg['util'] = 'THC-IPv6-redir6'
+            msg['pcap'] = self.save_pcap(msg, pkt)
+            self.put_attack(msg)
     
 def main():
     # Disabled the Scapy output, such as 'Sent 1 packets.'.
