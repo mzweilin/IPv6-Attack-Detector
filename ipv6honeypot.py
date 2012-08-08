@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import md5
 import binascii 
 import socket
 import threading
@@ -68,6 +69,14 @@ class Honeypot(threading.Thread):
         self.dst_addrs.append(self.solicited_node_addr)
         self.dst_addrs.append(self.all_nodes_addr)
         
+    def save_pcap(self, attack, pkt):
+        hash_str = md5.md5(str(pkt)).hexdigest()
+        filename = "%s_%s.pcap" % (self.config['name'], hash_str)
+        pcap_file = open("./pcap/"+filename, 'wb')
+        pcap_file.write(str(pkt))
+        pcap_file.close()
+        return filename
+    
     def run(self):
         log_msg = " ===%s initiated.===\n" % self.config['name']
         log_msg += "Interface: %s\n" % self.iface
@@ -119,6 +128,7 @@ class Honeypot(threading.Thread):
         else:
             if packet[Ether].src == self.mac or packet[IPv6].src != "::" and packet[IPv6].src in self.src_addrs:
                 msg = {}
+                msg['time'] = packet.time
                 msg['type'] = 'DoS|MitM'
                 msg['name'] = 'FakePacket'
                 msg['src'] = packet[IPv6].src
@@ -177,8 +187,7 @@ class Honeypot(threading.Thread):
             msg['dst'] = pkt[IPv6].dst
             msg['mac_dst'] = pkt[Ether].dst
             msg['util'] = 'Nmap, THC-IPv6-alive6'
-            msg['summary'] = None
-            msg['pcap'] = None
+            msg['pcap'] = self.save_pcap(msg, pkt)
             attack_msg = self.build_attack_msg(msg)
             self.log.alert(attack_msg)
             if len(self.unicast_addrs) == 0:
@@ -442,8 +451,7 @@ class Honeypot(threading.Thread):
         log_msg += "From: [%s]\n      MAC: %s (%s)\n" % (attack['src'], attack['mac_src'], mac2vendor(attack['mac_src']))
         log_msg += "To: [%s]\n    MAC: %s (%s)\n" % (attack['dst'], attack['mac_dst'], mac2vendor(attack['mac_dst']))
         log_msg += "Utility: %s\n" % attack['util']
-        log_msg += "Packet: %s\n" % attack['pcap']
-        log_msg += "Summary: %s\n" % attack['summary']
+        log_msg += "Packets: %s\n" % attack['pcap']
         return log_msg
         
     
