@@ -20,7 +20,7 @@ class Globalpot(threading.Thread):
         self.msg_queue = msg_queue
         
     def put_msg(self, msg):
-        msg['from'] = self.name
+        msg['from'] = 'Globalpot'
         self.msg_queue.put(msg)
         #TODO: send an event to notify the HCenter.
         
@@ -108,26 +108,9 @@ class Globalpot(threading.Thread):
         ra = pkt[ICMPv6ND_RA]
         ra.cksum = 0
         
-        md5hash = md5.md5(str(ra)).hexdigest()
-        
-        if md5hash != self.genuine_ra_hash:
-            if pkt[IPv6].src == self.genuine_router_addr:
-                # RA spoofing against the genuine router
-                if not ra.haslayer(ICMPv6NDOptPrefixInfo):
-                    # suspicious kill_route6 attack
-                    msg = self.new_msg(pkt)
-                    msg['type'] = 'DoS'
-                    msg['name'] = 'Fake Router Advertisement against the genuine router'
-                    msg['util'] = "THC-IPv6: kill_router6"
-                    self.put_attack(msg)
-                else:
-                    #log_msg = "Alert! Detected fake_router6 attack against the genuine router!"
-                    msg = self.new_msg(pkt)
-                    msg['type'] = 'DoS'
-                    msg['name'] = 'Fake Router Advertisement against the genuine router'
-                    msg['util'] = "THC-IPv6: fake_router6"
-                    self.put_attack(msg)
-            elif not ra.haslayer(ICMPv6NDOptPrefixInfo):
+        if pkt[IPv6].src != self.genuine_router_addr:
+            # It must be fake!
+            if not ra.haslayer(ICMPv6NDOptPrefixInfo):
                 #log_msg = "Warning! Detected invalid kill_router6 attack."
                 msg = self.new_msg(pkt)
                 msg['type'] = 'DoS'
@@ -146,34 +129,40 @@ class Globalpot(threading.Thread):
                 msg['attacker_mac'] = pkt[Ether].src
                 msg['util'] = "THC-IPv6: fake_router6"
                 self.put_attack(msg)
-            #print log_msg
-            timestamp = int(time.time())
-            if not self.spoofing_counter.has_key(timestamp):
-                self.spoofing_counter[timestamp] = 1
+        else:
+            md5hash = md5.md5(str(ra)).hexdigest()
+            if md5hash != self.genuine_ra_hash:
+                # RA spoofing against the genuine router
+                if not ra.haslayer(ICMPv6NDOptPrefixInfo):
+                    # suspicious kill_route6 attack
+                    msg = self.new_msg(pkt)
+                    msg['type'] = 'DoS'
+                    msg['name'] = 'Fake Router Advertisement against the genuine router'
+                    msg['util'] = "THC-IPv6: kill_router6"
+                    self.put_attack(msg)
+                else:
+                    #log_msg = "Alert! Detected fake_router6 attack against the genuine router!"
+                    msg = self.new_msg(pkt)
+                    msg['type'] = 'DoS'
+                    msg['name'] = 'Fake Router Advertisement against the genuine router'
+                    msg['util'] = "THC-IPv6: fake_router6"
+                    self.put_attack(msg)
             else:
-                self.spoofing_counter[timestamp] += 1
-                
-            #print self.spoofing_counter
-            
-            if self.spoofing_counter[timestamp] > 9:
-                #print "Alert! Detected flood_router6 attack!"
-                msg = self.new_msg(pkt)
-                msg['type'] = 'DoS'
-                msg['name'] = 'Flood Router Advertisement'
-                msg['util'] = "THC-IPv6: flood_router6"
-                self.put_attack(msg)
-                
-            if self.spoofing_ras.has_key(md5hash):
-                self.spoofing_ras[md5hash][1] += 1
-                (spoofing_ra, times) = self.spoofing_ras[md5hash]
-                log_msg = "%d times received the duplicate RA Spoofing!  " % (times)
-                if spoofing_ra.haslayer(ICMPv6NDOptPrefixInfo):
-                    log_msg += "Prefix/Len: %s/%d" % (spoofing_ra.prefix, spoofing_ra.prefixlen)
-                #print log_msg
-            else:
-                #print "New RA Spoofing!"
-                self.spoofing_ras[md5hash] = [ra, 1]
-                #self.print_ra(pkt)
+                return True
+
+        timestamp = int(time.time())
+        if not self.spoofing_counter.has_key(timestamp):
+            self.spoofing_counter[timestamp] = 1
+        else:
+            self.spoofing_counter[timestamp] += 1
+        
+        if self.spoofing_counter[timestamp] > 9:
+            #print "Alert! Detected flood_router6 attack!"
+            msg = self.new_msg(pkt)
+            msg['type'] = 'DoS'
+            msg['name'] = 'Flood Router Advertisement'
+            msg['util'] = "THC-IPv6: flood_router6"
+            self.put_attack(msg)
 
     # Print Router Advertisement message in a readable form.
     def print_ra(self, ra):
