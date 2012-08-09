@@ -235,7 +235,18 @@ class Honeypot(threading.Thread):
                     log_msg += "[%s], MAC: %s (%s).\n" % (target, target_mac, mac2vendor(target_mac))
                     if self.solicited_targets[target][0] == True: # DAD
                         self.tentative_addrs.pop(target)
-                        log_msg += "DAD result: Address [%s] in use." % target
+                        #log_msg += "DAD result: Address [%s] in use." % target
+                        msg = {}
+                        msg['timestamp'] = pkt.time
+                        msg['type'] = "DAD"
+                        msg['name'] = "Address in use"
+                        msg['src'] = pkt[IPv6].src
+                        msg['mac_src'] = pkt[Ether].src
+                        msg['dst'] = pkt[IPv6].dst
+                        msg['mac_dst'] = pkt[Ether].dst
+                        msg['util'] = "Unknown"
+                        msg['pcap'] = self.save_pcap(msg, pkt)
+                        self.put_event(msg)
                     self.solicited_targets.pop(target)
             else:
                 if pkt[IPv6].dst != "ff02::1":
