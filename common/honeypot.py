@@ -132,6 +132,7 @@ class Honeypot(threading.Thread):
     # ret: 0: normal packets, need further processing.
     # ret: 1: sent by itself, just ignore the packets.
     # ret: 2: spoofing alert.
+    # ret: 3: irrelevant packts.
     def check_received(self, packet):
         sig = binascii.b2a_hex(str(packet))
         #print "received:"
@@ -145,20 +146,21 @@ class Honeypot(threading.Thread):
             #else:
                 #self.log.info("Duplicate spoofing Alert!")
                 #return 2
-        else:
-            if packet[Ether].src == self.mac or packet[IPv6].src != "::" and packet[IPv6].src in self.src_addrs:
-                msg = {}
-                msg['timestamp'] = packet.time
-                msg['type'] = 'DoS|MitM'
-                msg['name'] = 'FakePacket'
-                msg['src'] = packet[IPv6].src
-                msg['dst'] = packet[IPv6].dst 
-                msg['mac_src'] = packet[Ether].src
-                msg['mac_dst'] = packet[Ether].dst
-                msg['util'] = 'Unknown'
-                msg['pcap'] = self.save_pcap(msg, packet)
-                self.put_attack(msg)
-                return 2
+        if packet[Ether].src == self.mac or packet[IPv6].src != "::" and packet[IPv6].src in self.src_addrs:
+            msg = {}
+            msg['timestamp'] = packet.time
+            msg['type'] = 'DoS|MitM'
+            msg['name'] = 'FakePacket'
+            msg['src'] = packet[IPv6].src
+            msg['dst'] = packet[IPv6].dst 
+            msg['mac_src'] = packet[Ether].src
+            msg['mac_dst'] = packet[Ether].dst
+            msg['util'] = 'Unknown'
+            msg['pcap'] = self.save_pcap(msg, packet)
+            self.put_attack(msg)
+            return 2
+        elif packet[Ether].dst != self.mac or packet[IPv6].dst not in self.dst_addrs:
+            return 3
         return 0
 
     # Record the packet in self.sent_sigs{}, then send it to the pre-specified interface.
