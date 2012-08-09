@@ -125,8 +125,17 @@ class HCenter():
         msg_str += "Reported by: %s\n" % msg['from']
         msg_str += "Type: %s\n" % msg['type']
         msg_str += "Name: %s\n" % msg['name']
-        msg_str += "Source: [%s]\n        MAC: %s (%s)\n" % (msg['src'], msg['mac_src'], mac2vendor(msg['mac_src']))
-        msg_str += "Destination: [%s]\n             MAC: %s (%s)\n" % (msg['dst'], msg['mac_dst'], mac2vendor(msg['mac_dst']))
+        if msg['level'] == 'ATTACK':
+            msg_str += "Attacker: [%s]" % msg['attacker']
+            if msg.has_key("attacker_mac"):
+                msg_str += "  %s (%s)\n" % (msg['attacker_mac'], mac2vendor(msg['attacker_mac']))
+            else:
+                msg_str += '\n'
+            msg_str += "Victim  : [%s]" % msg['victim']
+            if msg.has_key("victim_mac"):
+                msg_str += "  %s (%s)\n" % (msg['victim_mac'], mac2vendor(msg['victim_mac']))
+            else:
+                msg_str += '\n'
         msg_str += "Utility: %s\n" % msg['util']
         msg_str += "Packets: %s\n" % msg['pcap']
         return msg_str

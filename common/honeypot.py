@@ -150,6 +150,7 @@ class Honeypot(threading.Thread):
             msg = self.new_msg(pkt)
             msg['type'] = 'DoS|MitM'
             msg['name'] = 'FakePacket'
+            msg['attacker'] = 'Unknown'
             msg['util'] = 'Unknown'
             self.put_attack(msg)
             return 2
@@ -198,6 +199,8 @@ class Honeypot(threading.Thread):
             msg = self.new_msg(pkt)
             msg['type'] = 'HostDiscovery'
             msg['name'] = 'ICMPv6 invalid extension header'
+            msg['attacker'] = pkt[IPv6].src
+            msg['attacker_mac'] = pkt[Ether].src
             msg['util'] = 'Nmap, THC-IPv6-alive6'
             self.put_attack(msg)
             if len(self.unicast_addrs) == 0:
@@ -244,6 +247,8 @@ class Honeypot(threading.Thread):
                     msg = self.new_msg(pkt)
                     msg['type'] = "NDP"
                     msg['name'] = "Unsolicited Neighbor Advertisement"
+                    msg['attacker'] = pkt[IPv6].src
+                    msg['attacker_mac'] = pkt[Ether].src
                     msg['util'] = "THC-IPv6: fake_advertise6"
                     self.put_attack(msg)
             
@@ -285,6 +290,8 @@ class Honeypot(threading.Thread):
             msg = self.new_msg(req)
             msg['type'] = "HostDiscovery"
             msg['name'] = "ICMPv6 Echo Ping"
+            msg['attacker'] = req[IPv6].src
+            msg['attacker_mac'] = req[Ether].src
             msg['util'] = "Ping, Nmap, THC-IPv6-alive6"
             self.put_attack(msg)
         
@@ -323,6 +330,9 @@ class Honeypot(threading.Thread):
             msg = self.new_msg(ra)
             msg['type'] = "HostDiscovery"
             msg['name'] = "ICMPv6 SLAAC-based"
+            msg['attacker'] = ra[IPv6].src
+            if ICMPv6NDOptSrcLLAddr in ra:
+                msg['attacker_mac'] = ra[ICMPv6NDOptSrcLLAddr].lladdr
             msg['util'] = "Nmap"
             self.put_attack(msg)
         
@@ -470,6 +480,9 @@ class Honeypot(threading.Thread):
             msg = self.new_msg(pkt)
             msg['type'] = 'MitM | DoS'
             msg['name'] = 'ICMPv6 Redirect'
+            msg['attacker'] = pkt[ICMPv6ND_Redirect].tgt
+            if ICMPv6NDOptDstLLAddr in pkt:
+                msg['attacker_mac'] = pkt[ICMPv6NDOptDstLLAddr].lladdr
             msg['util'] = 'THC-IPv6-redir6'
             self.put_attack(msg)
             
@@ -477,10 +490,8 @@ class Honeypot(threading.Thread):
     def new_msg(self, pkt):
         msg = {}
         msg['timestamp'] = pkt.time
-        msg['mac_src'] = pkt[Ether].src
-        msg['src'] = pkt[IPv6].src
-        msg['dst'] = pkt[IPv6].dst
-        msg['mac_dst'] = pkt[Ether].dst
+        msg['victim'] = self.name
+        msg['victim_mac'] = self.mac
         msg['pcap'] = self.save_pcap(msg, pkt)
         return msg
     
