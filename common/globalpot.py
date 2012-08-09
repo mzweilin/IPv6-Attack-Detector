@@ -130,6 +130,7 @@ class Globalpot(threading.Thread):
                 msg['util'] = "THC-IPv6: fake_router6"
                 self.put_attack(msg)
         else:
+            #TODO: It looks as if the result is wrong. Check it next time.
             md5hash = md5.md5(str(ra)).hexdigest()
             if md5hash != self.genuine_ra_hash:
                 # RA spoofing against the genuine router
@@ -185,6 +186,7 @@ class Globalpot(threading.Thread):
         print ""
         
     # Build a new attack/event message entity.
+    #TODO: The message mechanism should be a module, since both the honeypot and globalpot module are using it.
     def new_msg(self, pkt):
         msg = {}
         msg['timestamp'] = pkt.time
@@ -194,6 +196,7 @@ class Globalpot(threading.Thread):
         return msg
         
     def save_pcap(self, msg, pkt):
+        #TODO: No need to save a duplicate file. (Usually the same filename means the same file.)
         hash_str = md5.md5(str(pkt)).hexdigest()
         filename = "%s_%s.pcap" % ('Globalpot', hash_str)
         pcap_file = open("./pcap/"+filename, 'wb')
