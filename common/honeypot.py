@@ -147,19 +147,15 @@ class Honeypot(threading.Thread):
                 #self.log.info("Duplicate spoofing Alert!")
                 #return 2
         if packet[Ether].src == self.mac or packet[IPv6].src != "::" and packet[IPv6].src in self.src_addrs:
-            msg = {}
-            msg['timestamp'] = packet.time
+            msg = self.new_msg(pkt)
             msg['type'] = 'DoS|MitM'
             msg['name'] = 'FakePacket'
-            msg['src'] = packet[IPv6].src
-            msg['dst'] = packet[IPv6].dst 
-            msg['mac_src'] = packet[Ether].src
-            msg['mac_dst'] = packet[Ether].dst
             msg['util'] = 'Unknown'
-            msg['pcap'] = self.save_pcap(msg, packet)
             self.put_attack(msg)
             return 2
-        elif packet[Ether].dst != self.mac or packet[IPv6].dst not in self.dst_addrs:
+        #elif packet[Ether].dst != self.mac or packet[IPv6].dst not in self.dst_addrs:
+        #TODO: Check MAC address.
+        elif packet[IPv6].dst not in self.dst_addrs:
             return 3
         return 0
 
@@ -199,16 +195,10 @@ class Honeypot(threading.Thread):
                     return 1
             elif pkt[HBHOptUnknown].otype & 0x80 != 0x80:
                 return 1
-            msg = {}
-            msg['timestamp'] = pkt.time
+            msg = self.new_msg(pkt)
             msg['type'] = 'HostDiscovery'
             msg['name'] = 'ICMPv6 invalid extension header'
-            msg['mac_src'] = pkt[Ether].src
-            msg['src'] = pkt[IPv6].src
-            msg['dst'] = pkt[IPv6].dst
-            msg['mac_dst'] = pkt[Ether].dst
             msg['util'] = 'Nmap, THC-IPv6-alive6'
-            msg['pcap'] = self.save_pcap(msg, pkt)
             self.put_attack(msg)
             if len(self.unicast_addrs) == 0:
                 return 1
@@ -233,33 +223,20 @@ class Honeypot(threading.Thread):
                     target_mac = pkt[ICMPv6NDOptDstLLAddr].lladdr
                     self.ip6_neigh[target] = target_mac
                     log_msg += "[%s], MAC: %s (%s).\n" % (target, target_mac, mac2vendor(target_mac))
+                    msg = self.new_msg(pkt)
                     if self.solicited_targets[target][0] == True: # DAD
                         self.tentative_addrs.pop(target)
                         #log_msg += "DAD result: Address [%s] in use." % target
                         # Report this address-in-use event to 6guard, so as to detect the dos-new-ip6 attack.
-                        msg = {}
-                        msg['timestamp'] = pkt.time
                         msg['type'] = "DAD"
                         msg['name'] = "Address in use"
-                        msg['src'] = pkt[IPv6].src
-                        msg['mac_src'] = pkt[Ether].src
-                        msg['dst'] = pkt[IPv6].dst
-                        msg['mac_dst'] = pkt[Ether].dst
                         msg['util'] = "Unknown"
-                        msg['pcap'] = self.save_pcap(msg, pkt)
                         self.put_event(msg)
                     else:
                         # Report this Neighbour Advertisement event to 6guard, so as to detect the parasite6 attack.
-                        msg = {}
-                        msg['timestamp'] = pkt.time
                         msg['type'] = "NDP"
                         msg['name'] = "Neighbour Advertisement"
-                        msg['src'] = pkt[IPv6].src
-                        msg['mac_src'] = pkt[Ether].src
-                        msg['dst'] = pkt[IPv6].dst
-                        msg['mac_dst'] = pkt[Ether].dst
                         msg['util'] = "Unknown"
-                        msg['pcap'] = self.save_pcap(msg, pkt)
                         self.put_event(msg)
                     self.solicited_targets.pop(target)
             else:
@@ -301,16 +278,10 @@ class Honeypot(threading.Thread):
         #print "do_ICMPv6Echo(), receved: "
         #print req.summary
         if req[IPv6].dst != "ff02::1":
-            msg = {}
-            msg['timestamp'] = req.time
+            msg = self.new_msg(req)
             msg['type'] = "HostDiscovery"
             msg['name'] = "ICMPv6 Echo Ping"
-            msg['src'] = req[IPv6].src
-            msg['mac_src'] = req[Ether].src
-            msg['dst'] = req[IPv6].dst
-            msg['mac_dst'] = req[Ether].dst
             msg['util'] = "Ping, Nmap, THC-IPv6-alive6"
-            msg['pcap'] = self.save_pcap(msg, req)
             self.put_attack(msg)
         
         # Don't reply an echo withourt unicast address. 
@@ -345,15 +316,10 @@ class Honeypot(threading.Thread):
         #TODO: I plan to detect such global attack in a central monitor program, rather than in each honeypot.
         if ra[ICMPv6ND_RA].routerlifetime == 0:
             # SLAAC for host discovery.
-            msg = {}
+            msg = self.new_msg(ra)
             msg['type'] = "HostDiscovery"
             msg['name'] = "ICMPv6 SLAAC-based"
-            msg['src'] = ra[IPv6].src
-            msg['mac_src'] = ra[Ether].src
-            msg['dst'] = ra[IPv6].dst
-            msg['mac_dst'] = ra[Ether].dst
             msg['util'] = "Nmap"
-            msg['pcap'] = self.save_pcap(msg, ra)
             self.put_attack(msg)
         
         prefix = ra[ICMPv6NDOptPrefixInfo].prefix
@@ -497,17 +463,22 @@ class Honeypot(threading.Thread):
     def handle_attack(self, pkt):
         # redir6 attack
         if ICMPv6ND_Redirect in pkt:
-            msg = {}
-            msg['timestamp'] = pkt.time
+            msg = self.new_msg(pkt)
             msg['type'] = 'MitM | DoS'
             msg['name'] = 'ICMPv6 Redirect'
-            msg['mac_src'] = pkt[Ether].src
-            msg['src'] = pkt[IPv6].src
-            msg['dst'] = pkt[IPv6].dst
-            msg['mac_dst'] = pkt[Ether].dst
             msg['util'] = 'THC-IPv6-redir6'
-            msg['pcap'] = self.save_pcap(msg, pkt)
             self.put_attack(msg)
+            
+    # Build a new attack/event message entity.
+    def new_msg(self, pkt):
+        msg = {}
+        msg['timestamp'] = pkt.time
+        msg['mac_src'] = pkt[Ether].src
+        msg['src'] = pkt[IPv6].src
+        msg['dst'] = pkt[IPv6].dst
+        msg['mac_dst'] = pkt[Ether].dst
+        msg['pcap'] = self.save_pcap(msg, pkt)
+        return msg
     
 def main():
     # Disabled the Scapy output, such as 'Sent 1 packets.'.
