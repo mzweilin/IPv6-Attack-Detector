@@ -147,11 +147,16 @@ class Honeypot(threading.Thread):
                 #self.log.info("Duplicate spoofing Alert!")
                 #return 2
         if packet[Ether].src == self.mac or packet[IPv6].src != "::" and packet[IPv6].src in self.src_addrs:
-            msg = self.new_msg(pkt)
-            msg['type'] = 'DoS|MitM'
-            msg['name'] = 'FakePacket'
+            msg = self.new_msg(packet)
+            if ICMPv6EchoRequest in packet:
+                msg['type'] = 'DoS'
+                msg['name'] = 'Fake Echo Request'
+                msg['util'] = "THC-IPv6: smurf6"
+            else:
+                msg['type'] = 'DoS|MitM'
+                msg['name'] = 'FakePacket'
+                msg['util'] = 'Unknown'
             msg['attacker'] = 'Unknown'
-            msg['util'] = 'Unknown'
             self.put_attack(msg)
             return 2
         #elif packet[Ether].dst != self.mac or packet[IPv6].dst not in self.dst_addrs:
