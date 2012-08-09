@@ -3,6 +3,7 @@ import os, threading, time
 from Queue import Queue
 from common import logger
 from common.honeypot import Honeypot
+from common.globalpot import Globalpot
 import ConfigParser
 from common import config
 from common.common import *
@@ -117,6 +118,12 @@ class HCenter():
                 self.send_command(cfg['name'], "STOP")
         return
             
+    def start_globalpot(self):
+        gp = Globalpot(self.msg_queue)
+        gp.setDaemon(True)
+        gp.start()
+        return
+    
     def format_msg(self, msg):
         time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(msg['timestamp']))
         
@@ -144,6 +151,7 @@ def main():
     sixguard = HCenter()
     sixguard.load_config()
     sixguard.start_all_honeypots()
+    sixguard.start_globalpot()
     
     try:
         raw_input("SixGuard is running...\n")

@@ -405,8 +405,8 @@ class Honeypot(threading.Thread):
             self.addr_timer[addr].cancel()
             del self.addr_timer[addr]
         if valid_lifetime != 0xffffffff: # non-infinity time.
-            self.addr_timer[new_addr] = threading.Timer(valid_lifetime, self.del_addr, args = [new_addr])
-            self.addr_timer[new_addr].start()
+            self.addr_timer[addr] = threading.Timer(valid_lifetime, self.del_addr, args = [addr])
+            self.addr_timer[addr].start()
         log_msg = "Updated the address [%s]." % addr
         self.log.debug(log_msg)
         
