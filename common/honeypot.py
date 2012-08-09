@@ -241,7 +241,11 @@ class Honeypot(threading.Thread):
                     self.solicited_targets.pop(target)
             else:
                 if pkt[IPv6].dst != "ff02::1":
-                    log_msg += "Alert: suspicious NA packet without NS!"
+                    msg = self.new_msg(pkt)
+                    msg['type'] = "NDP"
+                    msg['name'] = "Unsolicited Neighbor Advertisement"
+                    msg['util'] = "THC-IPv6: fake_advertise6"
+                    self.put_attack(msg)
             
         # Unexpected Neighbour Solicitation
         # 1. Duplicate Address Detection
