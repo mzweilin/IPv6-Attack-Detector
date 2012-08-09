@@ -236,10 +236,24 @@ class Honeypot(threading.Thread):
                     if self.solicited_targets[target][0] == True: # DAD
                         self.tentative_addrs.pop(target)
                         #log_msg += "DAD result: Address [%s] in use." % target
+                        # Report this address-in-use event to 6guard, so as to detect the dos-new-ip6 attack.
                         msg = {}
                         msg['timestamp'] = pkt.time
                         msg['type'] = "DAD"
                         msg['name'] = "Address in use"
+                        msg['src'] = pkt[IPv6].src
+                        msg['mac_src'] = pkt[Ether].src
+                        msg['dst'] = pkt[IPv6].dst
+                        msg['mac_dst'] = pkt[Ether].dst
+                        msg['util'] = "Unknown"
+                        msg['pcap'] = self.save_pcap(msg, pkt)
+                        self.put_event(msg)
+                    else:
+                        # Report this Neighbour Advertisement event to 6guard, so as to detect the parasite6 attack.
+                        msg = {}
+                        msg['timestamp'] = pkt.time
+                        msg['type'] = "NDP"
+                        msg['name'] = "Neighbour Advertisement"
                         msg['src'] = pkt[IPv6].src
                         msg['mac_src'] = pkt[Ether].src
                         msg['dst'] = pkt[IPv6].dst
