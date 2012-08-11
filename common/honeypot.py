@@ -13,42 +13,46 @@ from common import *
 # The class Honeypot emultates an IPv6 host.
 # TODO: Generate MAC address with specified vendor (or prefix).
 class Honeypot(threading.Thread):
-    # Stop flag
-    stop = False
 
-    #all_nodes_addr = inet_pton(socket.AF_INET6, "ff02::1")
-    mac = ""
-    iface_id = ""
-    
-    link_local_addr = "::"
-    solicited_node_addr = "::"
-    all_nodes_addr = "ff02::1"
-    unspecified_addr = "::"
-    unicast_addrs = {} # Directory {addr: [timestamp, valid_liftime, preferred_lifetime]}
-    tentative_addrs = {} # Directory {addr: [timestamp, valid_liftime, preferred_lifetime]}
-    addr_timer = {} # Directory {addr: threading.Timer()}
-    
-    # The probable addresses that may be used by honeypot as source address of packets.
-    # Types: unspecified(::), link-local, unicast_addrs
-    src_addrs = []
-    
-    # The probable destination addresses of captured packets that may relate to honeypot.
-    # Types: all-nodes, solicited-node, link-local, unicast_addrs
-    dst_addrs = []
-    
-    # Packet sending counter, with packet signatures.
-    sent_sigs = {}
-    
-    # NDP-related dada structure.
-    #self.solicited_list.append((target, dad_flag, timestamp))
-    # {target_ip6:(dad_flag, timestamp)
-    solicited_targets = {}
-    # {target_ip6:(mac)}
-    ip6_neigh = {}
+    # Initiating variables.
+    def __init_variable(self):
+        # Stop flag
+        self.stop = False
+
+        #all_nodes_addr = inet_pton(socket.AF_INET6, "ff02::1")
+        self.mac = ""
+        self.iface_id = ""
+        
+        self.link_local_addr = "::"
+        self.solicited_node_addr = "::"
+        self.all_nodes_addr = "ff02::1"
+        self.unspecified_addr = "::"
+        self.unicast_addrs = {} # Directory {addr: [timestamp, valid_liftime, preferred_lifetime]}
+        self.tentative_addrs = {} # Directory {addr: [timestamp, valid_liftime, preferred_lifetime]}
+        self.addr_timer = {} # Directory {addr: threading.Timer()}
+        
+        # The probable addresses that may be used by honeypot as source address of packets.
+        # Types: unspecified(::), link-local, unicast_addrs
+        self.src_addrs = []
+        
+        # The probable destination addresses of captured packets that may relate to honeypot.
+        # Types: all-nodes, solicited-node, link-local, unicast_addrs
+        self.dst_addrs = []
+        
+        # Packet sending counter, with packet signatures.
+        self.sent_sigs = {}
+        
+        # NDP-related dada structure.
+        #self.solicited_list.append((target, dad_flag, timestamp))
+        # {target_ip6:(dad_flag, timestamp)
+        self.solicited_targets = {}
+        # {target_ip6:(mac)}
+        self.ip6_neigh = {}
     
     def __init__(self, config, msg_queue):
-        conf.verb = 0
         threading.Thread.__init__(self)
+        conf.verb = 0
+        
         self.name = config['name']
         self.mac = config['mac']
         self.iface = config['iface']
@@ -226,7 +230,7 @@ class Honeypot(threading.Thread):
             # Record the pair of IP6addr-to-MAC 
             # The multicast host discovery and SLAAC will elicit NS.
             target = pkt[ICMPv6ND_NA].tgt
-            if target in self.solicited_targets.keys():
+            if self.solicited_targets.has_key(target):
                 if pkt.haslayer(ICMPv6NDOptDstLLAddr):
                     target_mac = pkt[ICMPv6NDOptDstLLAddr].lladdr
                     self.ip6_neigh[target] = target_mac
@@ -373,6 +377,8 @@ class Honeypot(threading.Thread):
             time_list = self.tentative_addrs[addr]
             self.add_addr(addr, 64, time_list)
             self.tentative_addrs.pop(addr)
+            if self.solicited_targets.has_key(addr):
+                self.solicited_targets.pop(addr)
             log_msg = "DAD completed."
             self.log.debug(log_msg)
         # self.do_NDP() will handle the 'else'
