@@ -16,6 +16,7 @@ class Honeypot(threading.Thread):
 
     # Initiating variables.
     def __init_variable(self):
+        # TODO: Stop the honeypot at any time. (By disabling all the configurable options.)
         # Stop flag
         self.stop = False
 
@@ -159,11 +160,18 @@ class Honeypot(threading.Thread):
                 msg['name'] = 'Fake Echo Request'
                 msg['util'] = "THC-IPv6: smurf6"
             else:
+                # TODO: How to handle the two attack alerts (FakePacket and DAD:Address in use) aiming at the same packet?
                 msg['type'] = 'DoS|MitM'
                 msg['name'] = 'FakePacket'
                 msg['util'] = 'Unknown'
-            msg['attacker'] = 'Unknown'
+            if packet[Ether].src != self.mac and packet[IPv6].src in self.src_addrs:
+                msg['attacker'] = 'Unknown'
+                msg['attacker_mac'] = packet[Ether].src
+            elif packet[Ether].src == self.mac and packet[IPv6].src not in self.src_addrs:
+                msg['attacker'] = packet[IPv6].src
+                msg['attacker_mac'] = 'Unknown'
             self.put_attack(msg)
+            
             return 2
         #elif packet[Ether].dst != self.mac or packet[IPv6].dst not in self.dst_addrs:
         #TODO: Check MAC address.
