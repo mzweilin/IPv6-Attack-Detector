@@ -164,6 +164,8 @@ class Honeypot(threading.Thread):
                 msg['type'] = 'DoS|MitM'
                 msg['name'] = 'FakePacket'
                 msg['util'] = 'Unknown'
+            msg['attacker'] = 'Unknown'
+            msg['attacker_mac'] = 'Unknown'
             if packet[Ether].src != self.mac and packet[IPv6].src in self.src_addrs:
                 msg['attacker'] = 'Unknown'
                 msg['attacker_mac'] = packet[Ether].src
