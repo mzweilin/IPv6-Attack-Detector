@@ -53,6 +53,8 @@ class Honeypot(threading.Thread):
         threading.Thread.__init__(self)
         conf.verb = 0
         
+        self.__init_variable()
+        
         self.name = config['name']
         self.mac = config['mac']
         self.iface = config['iface']
