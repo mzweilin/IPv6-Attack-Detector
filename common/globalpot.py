@@ -105,8 +105,8 @@ class Globalpot(threading.Thread):
                 select_index = int(raw_input("Please select the [index] of the genuine Router Advertisement:"))
             self.genuine_ra = ra_list[select_index][1]
             self.genuine_ra_hash = ra_list[select_index][0]
-            iface_id = in6_mactoifaceid(self.genuine_ra.lladdr).lower()
-            self.genuine_router_addr = "fe80::" + iface_id
+        iface_id = in6_mactoifaceid(self.genuine_ra.lladdr).lower()
+        self.genuine_router_addr = in6_ptop("fe80::" + iface_id)
             
     def clear_flood_ra(self):
         self.flood_ra_flag = False
@@ -159,13 +159,12 @@ class Globalpot(threading.Thread):
                 msg['util'] = "THC-IPv6: fake_router6"
                 self.msg.put_attack(msg)
         else:
-            #TODO: It looks as if the result is wrong. Check it next time.
             ra = pkt[ICMPv6ND_RA]
             ra.cksum = 0
             md5hash = md5.md5(str(ra)).hexdigest()
             if md5hash != self.genuine_ra_hash:
                 # RA spoofing against the genuine router
-                if not ra.haslayer(ICMPv6NDOptPrefixInfo):
+                if not ra.haslayer(ICMPv6NDOptPrefixInfo) or ra.routerlifetime < 100:
                     # suspicious kill_route6 attack
                     msg = self.msg.new_msg(pkt)
                     msg['type'] = 'DoS'
