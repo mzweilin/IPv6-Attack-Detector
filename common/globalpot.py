@@ -20,10 +20,13 @@ class Globalpot(threading.Thread):
         self.iface = 'eth5'
         
         self.msg = message.Message(msg_queue)
-        self.msg.user = self.name
+        self.msg.user = 'Globalpot'
         self.msg.msg_templete['attacker'] = 'Unknown'
         self.msg.msg_templete['victim'] = 'The whole network'
         self.msg.msg_templete['from'] = 'Globalpot'
+        
+        # RA Guard.
+        self.flood_ra_flag = False
     
     def ra_init(self):
         ra_lfilter = lambda (r): IPv6 in r and ICMPv6ND_RA in r
@@ -105,14 +108,38 @@ class Globalpot(threading.Thread):
             iface_id = in6_mactoifaceid(self.genuine_ra.lladdr).lower()
             self.genuine_router_addr = "fe80::" + iface_id
             
+    def clear_flood_ra(self):
+        self.flood_ra_flag = False
+    
     # If the received RA doesn't match with the self.genuine_ra, print Alert!
     def ra_guard(self, pkt):
-        ra = pkt[ICMPv6ND_RA]
-        ra.cksum = 0
-        
         if pkt[IPv6].src != self.genuine_router_addr:
             # It must be fake!
-            if not ra.haslayer(ICMPv6NDOptPrefixInfo):
+            # Detect flood_ra attack.
+            # Ignore the details of fake RAs while suffering flood RA attack.
+            if self.flood_ra_flag == True:
+                return
+            timestamp = int(pkt.time)
+            if not self.spoofing_counter.has_key(timestamp):
+                self.spoofing_counter[timestamp] = 1
+            else:
+                self.spoofing_counter[timestamp] += 1
+            
+            if self.spoofing_counter[timestamp] > 5:
+                #print "Alert! Detected flood_router6 attack!"
+                self.flood_ra_flag = True
+                msg = self.msg.new_msg(pkt, save_pcap = 0)
+                msg['type'] = 'DoS'
+                msg['name'] = 'Flood Router Advertisement'
+                msg['util'] = "THC-IPv6: flood_router6"
+                self.msg.put_attack(msg)
+                
+                # Set a 5s timer to clear the flood ra alert.
+                clear_flood_ra = threading.Timer(5.0, self.clear_flood_ra)
+                clear_flood_ra.start()
+                return
+            
+            if not pkt.haslayer(ICMPv6NDOptPrefixInfo):
                 #log_msg = "Warning! Detected invalid kill_router6 attack."
                 msg = self.msg.new_msg(pkt)
                 msg['type'] = 'DoS'
@@ -133,6 +160,8 @@ class Globalpot(threading.Thread):
                 self.msg.put_attack(msg)
         else:
             #TODO: It looks as if the result is wrong. Check it next time.
+            ra = pkt[ICMPv6ND_RA]
+            ra.cksum = 0
             md5hash = md5.md5(str(ra)).hexdigest()
             if md5hash != self.genuine_ra_hash:
                 # RA spoofing against the genuine router
@@ -151,21 +180,9 @@ class Globalpot(threading.Thread):
                     msg['util'] = "THC-IPv6: fake_router6"
                     self.msg.put_attack(msg)
             else:
-                return True
+                return
 
-        timestamp = int(time.time())
-        if not self.spoofing_counter.has_key(timestamp):
-            self.spoofing_counter[timestamp] = 1
-        else:
-            self.spoofing_counter[timestamp] += 1
-        
-        if self.spoofing_counter[timestamp] > 9:
-            #print "Alert! Detected flood_router6 attack!"
-            msg = self.new_msg(pkt)
-            msg['type'] = 'DoS'
-            msg['name'] = 'Flood Router Advertisement'
-            msg['util'] = "THC-IPv6: flood_router6"
-            self.msg.put_attack(msg)
+
 
     # Print Router Advertisement message in a readable form.
     def print_ra(self, ra):
