@@ -50,6 +50,9 @@ class Honeypot(threading.Thread):
         self.solicited_targets = {}
         # {target_ip6:(mac)}
         self.ip6_neigh = {}
+        
+        # Avoid putting flood msgs.
+        self.msg_record = {} # {timestamp: [str(msg)]}
     
     def __init__(self, config, msg_queue):
         threading.Thread.__init__(self)
@@ -87,6 +90,18 @@ class Honeypot(threading.Thread):
         self.log.close()
     
     def put_msg(self, msg):
+        # Avoid putting flood messages.
+        msg_copy = msg.copy()
+        msg_copy['timestamp'] = int(msg_copy['timestamp'])
+        timestamp = (msg_copy['timestamp'])
+        
+        if not self.msg_record.has_key(timestamp):
+            self.msg_record[timestamp] = []
+        # Don't put the same message again in a second.
+        if str(msg_copy) in self.msg_record[timestamp]:
+            return
+        self.msg_record[timestamp].append(str(msg_copy))
+        
         msg['from'] = self.name
         self.msg_queue.put(msg)
         #TODO: send an event to notify the HCenter.
@@ -114,10 +129,12 @@ class Honeypot(threading.Thread):
         rs = Ether(src=self.mac, dst='33:33:00:00:00:02')/IPv6(src=self.link_local_addr, dst='ff02::2')/ICMPv6ND_RS()
         self.send_packet(rs)
         
-        ip6_lfilter = lambda (r): IPv6 in r and TCP not in r and UDP not in r
+        ip6_lfilter = lambda (r): IPv6 in r and TCP not in r and UDP not in r and r[IPv6].dst in self.dst_addrs
         sniff(iface=self.iface, filter="ip6", lfilter=ip6_lfilter, prn=self.process)
 
     def process(self, pkt):
+        if self.pre_attack_detector(pkt) != 0:
+            return
         # Check spoofing.
         if self.check_received(pkt) != 0:
             return
@@ -135,6 +152,18 @@ class Honeypot(threading.Thread):
         else:
             self.handle_attack(pkt)
         return
+    
+    # Check the attacking traffic before honeypot really handling it.
+    def pre_attack_detector(self, pkt):
+        # THC-IPv6: sendpees6
+        if pkt.haslayer(ICMPv6ND_NS) and pkt.haslayer(ICMPv6NDOptSrcLLAddr) and pkt.haslayer(Raw) and len(pkt[Raw]) > 150:
+            msg = self.new_msg(pkt)
+            msg['type'] = "DoS"
+            msg['name'] = "Flood SEND NS"
+            msg['util'] = "THC-IPv6: sendpees6"
+            self.put_attack(msg)
+            return 1
+        return 0
     
     # Check up the recevied packets.
     # ret: 0: normal packets, need further processing.
@@ -517,6 +546,7 @@ class Honeypot(threading.Thread):
     def new_msg(self, pkt):
         msg = {}
         msg['timestamp'] = pkt.time
+        msg['attacker'] = 'Unknown'
         msg['victim'] = self.name
         msg['victim_mac'] = self.mac
         msg['pcap'] = self.save_pcap(msg, pkt)
