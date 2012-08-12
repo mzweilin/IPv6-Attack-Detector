@@ -35,6 +35,10 @@ class Globalpot(threading.Thread):
         self.flood_na_flag = False
         self.na_counter = {} # {timestamp: counter}
         
+        # DHCPCGuard is responsible for detecting flood_dhcpc6
+        self.flood_dhcpc_flag = False
+        self.dhcpc_counter = {} # {timestamp: counter}
+        
         
     def ra_init(self):
         ra_lfilter = lambda (r): IPv6 in r and ICMPv6ND_RA in r
@@ -51,7 +55,7 @@ class Globalpot(threading.Thread):
         self.print_ra(self.genuine_ra)
     
     def run(self):
-        globalpot_lfilter = lambda (r): IPv6 in r and r[IPv6].dst == 'ff02::1'
+        globalpot_lfilter = lambda (r): IPv6 in r and (r[IPv6].dst == 'ff02::1' or r[IPv6].dst == 'ff02::1:2')
         self.ra_init()
         print "\n Globalpot is running..."
         sniff(iface=self.iface, filter="ip6", lfilter = globalpot_lfilter, prn=self.process)
@@ -65,6 +69,8 @@ class Globalpot(threading.Thread):
             self.ns_guard(pkt)
         elif ICMPv6ND_NA in pkt:
             self.na_guard(pkt)
+        elif pkt[IPv6].dst == 'ff02::1:2' and DHCP6_Solicit in pkt:
+            self.dhcpc_guard(pkt)
     
     def clear_flood_ns(self):
         self.flood_ns_flag = False
@@ -160,6 +166,37 @@ class Globalpot(threading.Thread):
                 msg['victim'] = pkt[ICMPv6ND_NS].tgt
                 msg['util'] = "THC-IPv6: rsmurf6 | sendpeesmp6"
                 self.msg.put_attack(msg)
+            return 1
+        return 0
+        
+    def clear_flood_dhcpc(self):
+        self.flood_dhcpc_flag = False
+    
+    def dhcpc_guard(self, pkt):
+        # flood_dhcpc6
+        # Ignore the details of fake DHCPCs while suffering flood NA attack.
+        if self.flood_dhcpc_flag == True:
+            return
+            
+        timestamp = int(pkt.time)
+        if not self.dhcpc_counter.has_key(timestamp):
+            self.dhcpc_counter[timestamp] = 1
+        else:
+            self.dhcpc_counter[timestamp] += 1
+        
+        if self.dhcpc_counter[timestamp] > 5:
+            #print "Alert! Detected flood_dhcpc6 attack!"
+            self.flood_dhcpc_flag = True
+            msg = self.msg.new_msg(pkt, save_pcap = 0)
+            msg['type'] = 'DoS'
+            msg['name'] = 'Flood DHCP Solicit'
+            msg['util'] = "THC-IPv6: flood_dhcpc6"
+            self.msg.put_attack(msg)
+            
+            # Set a 5s timer to clear the flood ra alert.
+            clear_flood_dhcpc = threading.Timer(5.0, self.clear_flood_dhcpc)
+            clear_flood_dhcpc.start()
+            return
             return 1
         return 0
     
