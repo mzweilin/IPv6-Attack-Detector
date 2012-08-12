@@ -117,9 +117,11 @@ class Honeypot(threading.Thread):
     def save_pcap(self, attack, pkt):
         hash_str = md5.md5(str(pkt)).hexdigest()
         filename = "%s_%s.pcap" % (self.config['name'], hash_str)
-        pcap_file = open("./pcap/"+filename, 'wb')
-        pcap_file.write(str(pkt))
-        pcap_file.close()
+        location = './pcap/' + filename
+        if not os.path.isfile(location):
+            pcap_file = open(location, 'wb')
+            pcap_file.write(str(pkt))
+            pcap_file.close()
         return filename
     
     def run(self):
