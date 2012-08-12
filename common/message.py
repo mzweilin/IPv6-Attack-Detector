@@ -6,6 +6,7 @@ class Message():
         self.msg_queue = msg_queue
         
         # Avoid putting flood msgs.
+        # TODO: Clear the expired records.
         self.msg_record = {} # {timestamp: [str(msg)]}
         
         # The message instance can define its own message templete. Such as ['victim'] = honeypot_name
@@ -50,8 +51,11 @@ class Message():
         return filename
         
         # Build a new attack/event message entity.
-    def new_msg(self, pkt):
+    def new_msg(self, pkt, save_pcap = 1):
         msg = self.msg_templete.copy()
         msg['timestamp'] = pkt.time
-        msg['pcap'] = self.save_pcap(msg, pkt)
+        if save_pcap == 1:
+            msg['pcap'] = self.save_pcap(msg, pkt)
+        else:
+            msg['pcap'] = 'None'
         return msg
