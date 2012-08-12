@@ -219,13 +219,6 @@ class Honeypot(threading.Thread):
                     return 1
             elif pkt[HBHOptUnknown].otype & 0x80 != 0x80:
                 return 1
-            msg = self.new_msg(pkt)
-            msg['type'] = 'HostDiscovery'
-            msg['name'] = 'ICMPv6 invalid extension header'
-            msg['attacker'] = pkt[IPv6].src
-            msg['attacker_mac'] = pkt[Ether].src
-            msg['util'] = 'Nmap, THC-IPv6-alive6'
-            self.msg.put_attack(msg)
             if len(self.unicast_addrs) == 0:
                 return 1
             # send parameter problem message.
@@ -312,7 +305,7 @@ class Honeypot(threading.Thread):
         #print "do_ICMPv6Echo(), receved: "
         #print req.summary
         if req[IPv6].dst != "ff02::1":
-            msg = self.new_msg(req)
+            msg = self.msg.new_msg(req)
             msg['type'] = "HostDiscovery"
             msg['name'] = "ICMPv6 Echo Ping"
             msg['attacker'] = req[IPv6].src
@@ -348,19 +341,6 @@ class Honeypot(threading.Thread):
             log_msg += "No Prefix or SrcLLAddr, ignored."
             self.log.debug(log_msg)
             return
-        
-        #TODO: I plan to detect such global attack in a central monitor program, rather than in each honeypot.
-        if ra[ICMPv6ND_RA].routerlifetime == 0:
-            # SLAAC for host discovery.
-            msg = self.new_msg(ra)
-            msg['type'] = "HostDiscovery"
-            msg['name'] = "ICMPv6 SLAAC-based"
-            msg['attacker'] = ra[IPv6].src
-            if ICMPv6NDOptSrcLLAddr in ra:
-                msg['attacker_mac'] = ra[ICMPv6NDOptSrcLLAddr].lladdr
-            msg['util'] = "Nmap"
-            self.msg.put_attack(msg)
-        
         prefix = ra[ICMPv6NDOptPrefixInfo].prefix
         prefix_len = ra[ICMPv6NDOptPrefixInfo].prefixlen
         valid_lifetime = ra[ICMPv6NDOptPrefixInfo].validlifetime
