@@ -1,6 +1,7 @@
 import threading, md5
 from scapy.all import *
 from common import *
+import message
         
 class Globalpot(threading.Thread):
     # RAguard is responsible for detecting fake_router6, flood_router6, kill_router6
@@ -17,22 +18,14 @@ class Globalpot(threading.Thread):
     def __init__(self, msg_queue):
         threading.Thread.__init__(self)
         self.iface = 'eth5'
-        self.msg_queue = msg_queue
         
-    def put_msg(self, msg):
-        msg['from'] = 'Globalpot'
-        self.msg_queue.put(msg)
-        #TODO: send an event to notify the HCenter.
-        
-    def put_event(self, msg):
-        msg['level'] = 'EVENT'
-        self.put_msg(msg)
-     
-    def put_attack(self, msg):
-        msg['level'] = 'ATTACK'
-        self.put_msg(msg)
+        self.msg = message.Message(msg_queue)
+        self.msg.user = self.name
+        self.msg.msg_templete['attacker'] = 'Unknown'
+        self.msg.msg_templete['victim'] = 'The whole network'
+        self.msg.msg_templete['from'] = 'Globalpot'
     
-    def network_init(self):
+    def ra_init(self):
         ra_lfilter = lambda (r): IPv6 in r and ICMPv6ND_RA in r
         # Send a Router Solicitation to get all Router Advertisement messages.
         # In the future, it can call IPv6 honeypots to send RS message.
@@ -47,23 +40,32 @@ class Globalpot(threading.Thread):
         self.print_ra(self.genuine_ra)
     
     def run(self):
-        ra_lfilter = lambda (r): IPv6 in r and ICMPv6ND_RA in r
-        self.network_init()
-        print "\n RA Guard is running..."
-        sniff(iface=self.iface, filter="ip6", lfilter = ra_lfilter, prn=self.ra_guard)
+        globalpot_lfilter = lambda (r): IPv6 in r and r[IPv6].dst == 'ff02::1'
+        self.ra_init()
+        print "\n Globalpot is running..."
+        sniff(iface=self.iface, filter="ip6", lfilter = globalpot_lfilter, prn=self.process)
+    
+    def process(self, pkt):
+        if self.pre_attack_detector(pkt) != 0:
+            return
+        if ICMPv6ND_RA in pkt:
+            self.ra_guard(pkt)
+    
+    def pre_attack_detector(self, pkt):
+        return 0
     
     # Sniff all RAs and write them in self.ras
     # The structure of self.ras is,  {md5(ra): [ra, times]}
     def sniff_ra(self,pkt):
         # Filter the malformed Router Advertisement.
         if not pkt.haslayer(ICMPv6NDOptSrcLLAddr):
-            return False
+            return
         elif pkt[Ether].src != pkt[ICMPv6NDOptSrcLLAddr].lladdr:
-            return False
+            return
         # Filter RAs to other hosts.
         # Filter RAs sent by kill_router6.
         if not pkt.haslayer(ICMPv6NDOptPrefixInfo):
-            return False
+            return
         
         ra = pkt[ICMPv6ND_RA]
         ra.cksum = 0
@@ -77,7 +79,7 @@ class Globalpot(threading.Thread):
             self.ras[md5hash] = [ra, 1]
             #print "new"
         self.received_ra_flag = True
-        return True
+        return
     
     # Select a geniune RA from sniffing result.
     def select_genuine_ra(self):
@@ -112,23 +114,23 @@ class Globalpot(threading.Thread):
             # It must be fake!
             if not ra.haslayer(ICMPv6NDOptPrefixInfo):
                 #log_msg = "Warning! Detected invalid kill_router6 attack."
-                msg = self.new_msg(pkt)
+                msg = self.msg.new_msg(pkt)
                 msg['type'] = 'DoS'
                 msg['name'] = 'Fake Router Advertisement against the fake router'
                 msg['attacker'] = pkt[IPv6].src
                 msg['attacker_mac'] = pkt[Ether].src
                 msg['util'] = "THC-IPv6: kill_router6"
-                self.put_attack(msg)
+                self.msg.put_attack(msg)
             else:
                 # fake_route6 attack or flood_route6 attack as a new router
                 #log_msg = "Alert! Detected fake_route6 attack as new router!"
-                msg = self.new_msg(pkt)
+                msg = self.msg.new_msg(pkt)
                 msg['type'] = 'DoS'
                 msg['name'] = 'Fake Router Advertisement'
                 msg['attacker'] = pkt[IPv6].src
                 msg['attacker_mac'] = pkt[Ether].src
                 msg['util'] = "THC-IPv6: fake_router6"
-                self.put_attack(msg)
+                self.msg.put_attack(msg)
         else:
             #TODO: It looks as if the result is wrong. Check it next time.
             md5hash = md5.md5(str(ra)).hexdigest()
@@ -136,18 +138,18 @@ class Globalpot(threading.Thread):
                 # RA spoofing against the genuine router
                 if not ra.haslayer(ICMPv6NDOptPrefixInfo):
                     # suspicious kill_route6 attack
-                    msg = self.new_msg(pkt)
+                    msg = self.msg.new_msg(pkt)
                     msg['type'] = 'DoS'
                     msg['name'] = 'Fake Router Advertisement against the genuine router'
                     msg['util'] = "THC-IPv6: kill_router6"
-                    self.put_attack(msg)
+                    self.msg.put_attack(msg)
                 else:
                     #log_msg = "Alert! Detected fake_router6 attack against the genuine router!"
-                    msg = self.new_msg(pkt)
+                    msg = self.msg.new_msg(pkt)
                     msg['type'] = 'DoS'
                     msg['name'] = 'Fake Router Advertisement against the genuine router'
                     msg['util'] = "THC-IPv6: fake_router6"
-                    self.put_attack(msg)
+                    self.msg.put_attack(msg)
             else:
                 return True
 
@@ -163,7 +165,7 @@ class Globalpot(threading.Thread):
             msg['type'] = 'DoS'
             msg['name'] = 'Flood Router Advertisement'
             msg['util'] = "THC-IPv6: flood_router6"
-            self.put_attack(msg)
+            self.msg.put_attack(msg)
 
     # Print Router Advertisement message in a readable form.
     def print_ra(self, ra):
@@ -184,22 +186,4 @@ class Globalpot(threading.Thread):
             print '  Pref. time              : %d (0x%x) seconds' \
                     % (ra.preferredlifetime, ra.preferredlifetime)
         print ""
-        
-    # Build a new attack/event message entity.
-    #TODO: The message mechanism should be a module, since both the honeypot and globalpot module are using it.
-    def new_msg(self, pkt):
-        msg = {}
-        msg['timestamp'] = pkt.time
-        msg['attacker'] = 'Unknown'
-        msg['victim'] = 'The whole network'
-        msg['pcap'] = self.save_pcap(msg, pkt)
-        return msg
-        
-    def save_pcap(self, msg, pkt):
-        #TODO: No need to save a duplicate file. (Usually the same filename means the same file.)
-        hash_str = md5.md5(str(pkt)).hexdigest()
-        filename = "%s_%s.pcap" % ('Globalpot', hash_str)
-        pcap_file = open("./pcap/"+filename, 'wb')
-        pcap_file.write(str(pkt))
-        pcap_file.close()
-        return filename
+
