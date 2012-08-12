@@ -27,6 +27,15 @@ class Globalpot(threading.Thread):
         self.received_ra_flag = False
         self.flood_ra_flag = False
     
+        # NSGuard is responsible for detecting , flood_solicitate6, rsmurf6, sendpeesmp6
+        self.flood_ns_flag = False
+        self.ns_counter = {} # {timestamp: counter}
+        
+        # NAGuard is responsible for detecting fake_advertise6, flood_advertise6
+        self.flood_na_flag = False
+        self.na_counter = {} # {timestamp: counter}
+        
+        
     def ra_init(self):
         ra_lfilter = lambda (r): IPv6 in r and ICMPv6ND_RA in r
         # Send a Router Solicitation to get all Router Advertisement messages.
@@ -48,24 +57,110 @@ class Globalpot(threading.Thread):
         sniff(iface=self.iface, filter="ip6", lfilter = globalpot_lfilter, prn=self.process)
     
     def process(self, pkt):
-        if self.pre_attack_detector(pkt) != 0:
-            return
+        #if self.pre_attack_detector(pkt) != 0:
+        #    return
         if ICMPv6ND_RA in pkt:
             self.ra_guard(pkt)
+        elif ICMPv6ND_NS in pkt:
+            self.ns_guard(pkt)
+        elif ICMPv6ND_NA in pkt:
+            self.na_guard(pkt)
     
-    def pre_attack_detector(self, pkt):
+    def clear_flood_ns(self):
+        self.flood_ns_flag = False
+    
+    def ns_guard(self, pkt):
         # Responsible for detecting THC-IPv6: sendpeesmp6
-        if ICMPv6ND_NS in pkt and ICMPv6NDOptSrcLLAddr in pkt:
-            msg = self.msg.new_msg(pkt)
-            msg['type'] = 'DoS'
-            msg['name'] = 'Neighbor Solicitation to ff02::1'
-            msg['attacker'] = pkt[IPv6].src
-            msg['attacker_mac'] = pkt[Ether].src
-            msg['victim'] = pkt[ICMPv6ND_NS].tgt
-            msg['util'] = "THC-IPv6: rsmurf6 | sendpeesmp6"
-            self.msg.put_attack(msg)
+        if ICMPv6NDOptSrcLLAddr in pkt:
+            src_type = in6_getAddrType(pkt[IPv6].src)
+            #IPV6_ADDR_LINKLOCAL
+            #IPV6_ADDR_GLOBAL
+            if (src_type & IPV6_ADDR_LINKLOCAL) == IPV6_ADDR_LINKLOCAL:
+                # flood_solicitate6
+                # Ignore the details of fake NSs while suffering flood NS attack.
+                if self.flood_ns_flag == True:
+                    return
+                    
+                timestamp = int(pkt.time)
+                if not self.ns_counter.has_key(timestamp):
+                    self.ns_counter[timestamp] = 1
+                else:
+                    self.ns_counter[timestamp] += 1
+                
+                if self.ns_counter[timestamp] > 5:
+                    #print "Alert! Detected flood_solicitate6 attack!"
+                    self.flood_ns_flag = True
+                    msg = self.msg.new_msg(pkt, save_pcap = 0)
+                    msg['type'] = 'DoS'
+                    msg['name'] = 'Flood Neighbor Solicitation to ff02::1'
+                    msg['util'] = "THC-IPv6: flood_solicitate6"
+                    self.msg.put_attack(msg)
+                    
+                    # Set a 5s timer to clear the flood ra alert.
+                    clear_flood_ns = threading.Timer(5.0, self.clear_flood_ns)
+                    clear_flood_ns.start()
+                    return
+            else:
+                msg = self.msg.new_msg(pkt)
+                msg['type'] = 'DoS'
+                msg['name'] = 'Neighbor Solicitation to ff02::1'
+                msg['attacker'] = pkt[IPv6].src
+                msg['attacker_mac'] = pkt[Ether].src
+                msg['victim'] = pkt[ICMPv6ND_NS].tgt
+                msg['util'] = "THC-IPv6: rsmurf6 | sendpeesmp6"
+                self.msg.put_attack(msg)
             return 1
+        return 0
         
+    def clear_flood_na(self):
+        self.flood_na_flag = False
+    
+    def na_guard(self, pkt):
+        if ICMPv6NDOptDstLLAddr in pkt:
+            src_type = in6_getAddrType(pkt[IPv6].src)
+            #IPV6_ADDR_LINKLOCAL
+            #IPV6_ADDR_GLOBAL
+            if (src_type & IPV6_ADDR_LINKLOCAL) == IPV6_ADDR_LINKLOCAL:
+                # flood_advertise6
+                # Ignore the details of fake NAs while suffering flood NA attack.
+                if self.flood_na_flag == True:
+                    return
+                    
+                timestamp = int(pkt.time)
+                if not self.na_counter.has_key(timestamp):
+                    self.na_counter[timestamp] = 1
+                    msg = self.msg.new_msg(pkt)
+                    msg['type'] = 'DoS'
+                    msg['name'] = 'Fake Neighbor Advertisement to ff02::1'
+                    msg['util'] = "THC-IPv6: fake_advertise6"
+                    self.msg.put_attack(msg)
+                else:
+                    # Detect the 2nd fake_advertise6 in a second, which is likely to be flood_advertise6.
+                    self.na_counter[timestamp] += 1
+                
+                if self.na_counter[timestamp] > 5:
+                    #print "Alert! Detected flood_advertise6 attack!"
+                    self.flood_na_flag = True
+                    msg = self.msg.new_msg(pkt, save_pcap = 0)
+                    msg['type'] = 'DoS'
+                    msg['name'] = 'Flood Neighbor Advertisement to ff02::1'
+                    msg['util'] = "THC-IPv6: flood_advertise6"
+                    self.msg.put_attack(msg)
+                    
+                    # Set a 5s timer to clear the flood ra alert.
+                    clear_flood_na = threading.Timer(5.0, self.clear_flood_na)
+                    clear_flood_na.start()
+                    return
+            else:
+                msg = self.msg.new_msg(pkt)
+                msg['type'] = 'DoS'
+                msg['name'] = 'Neighbor Solicitation to ff02::1'
+                msg['attacker'] = pkt[IPv6].src
+                msg['attacker_mac'] = pkt[Ether].src
+                msg['victim'] = pkt[ICMPv6ND_NS].tgt
+                msg['util'] = "THC-IPv6: rsmurf6 | sendpeesmp6"
+                self.msg.put_attack(msg)
+            return 1
         return 0
     
     # Sniff all RAs and write them in self.ras
