@@ -9,6 +9,7 @@ from scapy.all import *
 #from common import config
 import logger
 from common import *
+import message
 
 # The class Honeypot emultates an IPv6 host.
 # TODO: Generate MAC address with specified vendor (or prefix).
@@ -50,9 +51,6 @@ class Honeypot(threading.Thread):
         self.solicited_targets = {}
         # {target_ip6:(mac)}
         self.ip6_neigh = {}
-        
-        # Avoid putting flood msgs.
-        self.msg_record = {} # {timestamp: [str(msg)]}
     
     def __init__(self, config, msg_queue):
         threading.Thread.__init__(self)
@@ -64,7 +62,13 @@ class Honeypot(threading.Thread):
         self.mac = config['mac']
         self.iface = config['iface']
         self.config = config
-        self.msg_queue = msg_queue
+        
+        self.msg = message.Message(msg_queue)
+        self.msg.user = self.name
+        self.msg.msg_templete['attacker'] = 'Unknown'
+        self.msg.msg_templete['victim'] = self.name
+        self.msg.msg_templete['victim_mac'] = self.mac
+        self.msg.msg_templete['from'] = self.name
         
         log_file = "./log/%s.log" % self.name
         self.log = logger.Log(log_file)
@@ -88,41 +92,6 @@ class Honeypot(threading.Thread):
         
     def __del__(self):
         self.log.close()
-    
-    def put_msg(self, msg):
-        # Avoid putting flood messages.
-        msg_copy = msg.copy()
-        msg_copy['timestamp'] = int(msg_copy['timestamp'])
-        timestamp = (msg_copy['timestamp'])
-        
-        if not self.msg_record.has_key(timestamp):
-            self.msg_record[timestamp] = []
-        # Don't put the same message again in a second.
-        if str(msg_copy) in self.msg_record[timestamp]:
-            return
-        self.msg_record[timestamp].append(str(msg_copy))
-        
-        msg['from'] = self.name
-        self.msg_queue.put(msg)
-        #TODO: send an event to notify the HCenter.
-        
-    def put_event(self, msg):
-        msg['level'] = 'EVENT'
-        self.put_msg(msg)
-     
-    def put_attack(self, msg):
-        msg['level'] = 'ATTACK'
-        self.put_msg(msg)
-    
-    def save_pcap(self, attack, pkt):
-        hash_str = md5.md5(str(pkt)).hexdigest()
-        filename = "%s_%s.pcap" % (self.config['name'], hash_str)
-        location = './pcap/' + filename
-        if not os.path.isfile(location):
-            pcap_file = open(location, 'wb')
-            pcap_file.write(str(pkt))
-            pcap_file.close()
-        return filename
     
     def run(self):
         log_msg = "Start."
@@ -159,11 +128,12 @@ class Honeypot(threading.Thread):
     def pre_attack_detector(self, pkt):
         # THC-IPv6: sendpees6
         if pkt.haslayer(ICMPv6ND_NS) and pkt.haslayer(ICMPv6NDOptSrcLLAddr) and pkt.haslayer(Raw) and len(pkt[Raw]) > 150:
-            msg = self.new_msg(pkt)
+            msg = self.msg.new_msg(pkt)
             msg['type'] = "DoS"
             msg['name'] = "Flood SEND NS"
             msg['util'] = "THC-IPv6: sendpees6"
-            self.put_attack(msg)
+            self.msg.put_attack(msg)
+            print "attack"
             return 1
         return 0
     
@@ -204,7 +174,7 @@ class Honeypot(threading.Thread):
             elif packet[Ether].src == self.mac and packet[IPv6].src not in self.src_addrs:
                 msg['attacker'] = packet[IPv6].src
                 msg['attacker_mac'] = 'Unknown'
-            self.put_attack(msg)
+            self.msg.put_attack(msg)
             
             return 2
         #elif packet[Ether].dst != self.mac or packet[IPv6].dst not in self.dst_addrs:
@@ -255,7 +225,7 @@ class Honeypot(threading.Thread):
             msg['attacker'] = pkt[IPv6].src
             msg['attacker_mac'] = pkt[Ether].src
             msg['util'] = 'Nmap, THC-IPv6-alive6'
-            self.put_attack(msg)
+            self.msg.put_attack(msg)
             if len(self.unicast_addrs) == 0:
                 return 1
             # send parameter problem message.
@@ -287,7 +257,7 @@ class Honeypot(threading.Thread):
                         msg['type'] = "DAD"
                         msg['name'] = "Address in use"
                         msg['util'] = "Unknown"
-                        self.put_event(msg)
+                        self.msg.put_event(msg)
                         self.dad_timer[target].cancel()
                         del self.dad_timer[target]
                     else:
@@ -295,7 +265,7 @@ class Honeypot(threading.Thread):
                         msg['type'] = "NDP"
                         msg['name'] = "Neighbour Advertisement"
                         msg['util'] = "Unknown"
-                        self.put_event(msg)
+                        self.msg.put_event(msg)
                     self.solicited_targets.pop(target)
             else:
                 if pkt[IPv6].dst != "ff02::1":
@@ -305,7 +275,7 @@ class Honeypot(threading.Thread):
                     msg['attacker'] = pkt[IPv6].src
                     msg['attacker_mac'] = pkt[Ether].src
                     msg['util'] = "THC-IPv6: fake_advertise6"
-                    self.put_attack(msg)
+                    self.msg.put_attack(msg)
             
         # Unexpected Neighbour Solicitation
         # 1. Duplicate Address Detection
@@ -348,7 +318,7 @@ class Honeypot(threading.Thread):
             msg['attacker'] = req[IPv6].src
             msg['attacker_mac'] = req[Ether].src
             msg['util'] = "Ping, Nmap, THC-IPv6-alive6"
-            self.put_attack(msg)
+            self.msg.put_attack(msg)
         
         # Don't reply an echo withourt unicast address. 
         if len(self.unicast_addrs.keys()) == 0:
@@ -389,7 +359,7 @@ class Honeypot(threading.Thread):
             if ICMPv6NDOptSrcLLAddr in ra:
                 msg['attacker_mac'] = ra[ICMPv6NDOptSrcLLAddr].lladdr
             msg['util'] = "Nmap"
-            self.put_attack(msg)
+            self.msg.put_attack(msg)
         
         prefix = ra[ICMPv6NDOptPrefixInfo].prefix
         prefix_len = ra[ICMPv6NDOptPrefixInfo].prefixlen
@@ -542,17 +512,7 @@ class Honeypot(threading.Thread):
             if ICMPv6NDOptDstLLAddr in pkt:
                 msg['attacker_mac'] = pkt[ICMPv6NDOptDstLLAddr].lladdr
             msg['util'] = 'THC-IPv6-redir6'
-            self.put_attack(msg)
-            
-    # Build a new attack/event message entity.
-    def new_msg(self, pkt):
-        msg = {}
-        msg['timestamp'] = pkt.time
-        msg['attacker'] = 'Unknown'
-        msg['victim'] = self.name
-        msg['victim_mac'] = self.mac
-        msg['pcap'] = self.save_pcap(msg, pkt)
-        return msg
+            self.msg.put_attack(msg)
     
 def main():
     # Disabled the Scapy output, such as 'Sent 1 packets.'.
