@@ -63,16 +63,17 @@ class Globalpot(threading.Thread):
     def process(self, pkt):
         #if self.pre_attack_detector(pkt) != 0:
         #    return
-        if ICMPv6ND_RA in pkt:
-            self.ra_guard(pkt)
-        elif ICMPv6ND_NS in pkt:
-            self.ns_guard(pkt)
-        elif ICMPv6ND_NA in pkt:
-            self.na_guard(pkt)
+        if pkt[IPv6].dst == 'ff02::1':
+            if ICMPv6ND_RA in pkt:
+                self.ra_guard(pkt)
+            elif ICMPv6ND_NS in pkt:
+                self.ns_guard(pkt)
+            elif ICMPv6ND_NA in pkt:
+                self.na_guard(pkt)
+            elif HBHOptUnknown in pkt or ICMPv6EchoRequest in pkt:
+                self.host_discovery_guard(pkt)
         elif pkt[IPv6].dst == 'ff02::1:2' and DHCP6_Solicit in pkt:
             self.dhcpc_guard(pkt)
-        elif HBHOptUnknown in pkt or ICMPv6EchoRequest in pkt:
-            self.host_discovery_guard(pkt)
 
     # Handle the IPv6 invalid extention header options. (One of Nmap's host discovery technique.)
     
