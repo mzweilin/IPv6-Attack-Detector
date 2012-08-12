@@ -54,6 +54,18 @@ class Globalpot(threading.Thread):
             self.ra_guard(pkt)
     
     def pre_attack_detector(self, pkt):
+        # Responsible for detecting THC-IPv6: sendpeesmp6
+        if ICMPv6ND_NS in pkt and ICMPv6NDOptSrcLLAddr in pkt:
+            msg = self.msg.new_msg(pkt)
+            msg['type'] = 'DoS'
+            msg['name'] = 'Neighbor Solicitation to ff02::1'
+            msg['attacker'] = pkt[IPv6].src
+            msg['attacker_mac'] = pkt[Ether].src
+            msg['victim'] = pkt[ICMPv6ND_NS].tgt
+            msg['util'] = "THC-IPv6: rsmurf6 | sendpeesmp6"
+            self.msg.put_attack(msg)
+            return 1
+        
         return 0
     
     # Sniff all RAs and write them in self.ras
