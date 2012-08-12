@@ -31,6 +31,7 @@ class Honeypot(threading.Thread):
         self.unicast_addrs = {} # Directory {addr: [timestamp, valid_liftime, preferred_lifetime]}
         self.tentative_addrs = {} # Directory {addr: [timestamp, valid_liftime, preferred_lifetime]}
         self.addr_timer = {} # Directory {addr: threading.Timer()}
+        self.dad_timer = {} # {addr: Threading_timer}
         
         # The probable addresses that may be used by honeypot as source address of packets.
         # Types: unspecified(::), link-local, unicast_addrs
@@ -256,6 +257,8 @@ class Honeypot(threading.Thread):
                         msg['name'] = "Address in use"
                         msg['util'] = "Unknown"
                         self.put_event(msg)
+                        self.dad_timer[target].cancel()
+                        del self.dad_timer[target]
                     else:
                         # Report this Neighbour Advertisement event to 6guard, so as to detect the parasite6 attack.
                         msg['type'] = "NDP"
@@ -379,6 +382,7 @@ class Honeypot(threading.Thread):
                     # Check if the address has been used by other nodes after 5 seconds.
                     dad_check = threading.Timer(5.0, self.do_DAD, args = [new_addr])
                     dad_check.start()
+                    self.dad_timer[new_addr] = dad_check
         else:
             log_msg += "Prefix illegal, ignored."
             self.log.warning(log_msg)
