@@ -56,7 +56,7 @@ class Globalpot(threading.Thread):
     
     def run(self):
         globalpot_lfilter = lambda (r): IPv6 in r and (r[IPv6].dst == 'ff02::1' or r[IPv6].dst == 'ff02::1:2')
-        self.ra_init()
+        #self.ra_init()
         print "\n Globalpot is running..."
         sniff(iface=self.iface, filter="ip6", lfilter = globalpot_lfilter, prn=self.process)
     
@@ -71,6 +71,43 @@ class Globalpot(threading.Thread):
             self.na_guard(pkt)
         elif pkt[IPv6].dst == 'ff02::1:2' and DHCP6_Solicit in pkt:
             self.dhcpc_guard(pkt)
+        elif HBHOptUnknown in pkt or ICMPv6EchoRequest in pkt:
+            self.host_discovery_guard(pkt)
+
+    # Handle the IPv6 invalid extention header options. (One of Nmap's host discovery technique.)
+    
+    def host_discovery_guard(self, pkt):
+    
+        # known_option_types = (0x0,0x1,0xc2,0xc3,0x4,0x5,0x26,0x7,0x8,0xc9,0x8a,0x1e,0x3e,0x5e,0x63,0x7e,0x9e,0xbe,0xde,0xfe)
+        # Use the known list of Scapy's parser.
+        # The allocated option types are listd in http://www.iana.org/assignments/ipv6-parameters/.
+        # When receives a packet with unrecognizable options of destination extension header or hop-by-hop extension header, the IPv6 node should reply a Parameter Problem message.
+        # RFC 2460, section 4.2 defines the TLV format of options headers, and the actions that will be take when received a unrecognizable option.
+        # The action depends on the highest-order two bits:
+        # 11 - discard the packet and, only if the packet's dst addr was not a multicast address, send ICMP Parameter Problem, Code 2, message to the src addr.
+        # 10 - discard the packet and, regardless of whether or not the packet's dstaddr was a multicast address, send an parameter problem message.
+        if HBHOptUnknown in pkt:
+            if (pkt[HBHOptUnknown].otype & 0xc0) == 0xc0: 
+                dst_type = in6_getAddrType(pkt[IPv6].dst)
+                if (dst_type & IPV6_ADDR_MULTICAST) == IPv6_ADDR_MULTICAST:
+                    return
+            elif pkt[HBHOptUnknown].otype & 0x80 != 0x80:
+                return
+            msg = self.msg.new_msg(pkt)
+            msg['type'] = 'HostDiscovery'
+            msg['name'] = 'ICMPv6 invalid extension header'
+            msg['attacker'] = pkt[IPv6].src
+            msg['attacker_mac'] = pkt[Ether].src
+            msg['util'] = 'Nmap, THC-IPv6-alive6'
+            self.msg.put_attack(msg)
+        elif ICMPv6EchoRequest in pkt:
+            msg = self.msg.new_msg(pkt)
+            msg['type'] = "HostDiscovery"
+            msg['name'] = "ICMPv6 Echo Ping"
+            msg['attacker'] = pkt[IPv6].src
+            msg['attacker_mac'] = pkt[Ether].src
+            msg['util'] = "Ping, Nmap, THC-IPv6-alive6"
+            self.msg.put_attack(msg)
     
     def clear_flood_ns(self):
         self.flood_ns_flag = False
@@ -256,6 +293,18 @@ class Globalpot(threading.Thread):
     
     # If the received RA doesn't match with the self.genuine_ra, print Alert!
     def ra_guard(self, pkt):
+        if pkt[ICMPv6ND_RA].routerlifetime == 0:
+            # SLAAC for host discovery.
+            msg = self.msg.new_msg(pkt)
+            msg['type'] = "HostDiscovery"
+            msg['name'] = "ICMPv6 SLAAC-based"
+            msg['attacker'] = pkt[IPv6].src
+            if ICMPv6NDOptSrcLLAddr in pkt:
+                msg['attacker_mac'] = pkt[ICMPv6NDOptSrcLLAddr].lladdr
+            msg['util'] = "Nmap"
+            self.msg.put_attack(msg)
+            return
+    
         if pkt[IPv6].src != self.genuine_router_addr:
             # It must be fake!
             # Detect flood_ra attack.
