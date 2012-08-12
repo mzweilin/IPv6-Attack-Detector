@@ -4,16 +4,6 @@ from common import *
 import message
         
 class Globalpot(threading.Thread):
-    # RAguard is responsible for detecting fake_router6, flood_router6, kill_router6
-    ras = {}
-    spoofing_ras = {} #{ra: counter}
-    spoofing_counter = {} # {timestamp: counter}
-    
-    genuine_ra = ""
-    genuine_router_addr = ""
-    genuine_ra_hash = ""
-    
-    received_ra_flag = False
     
     def __init__(self, msg_queue):
         threading.Thread.__init__(self)
@@ -25,7 +15,16 @@ class Globalpot(threading.Thread):
         self.msg.msg_templete['victim'] = 'The whole network'
         self.msg.msg_templete['from'] = 'Globalpot'
         
-        # RA Guard.
+        # RAguard is responsible for detecting fake_router6, flood_router6, kill_router6
+        self.ras = {}
+        self.spoofing_ras = {} #{ra: counter}
+        self.spoofing_counter = {} # {timestamp: counter}
+        
+        self.genuine_ra = ""
+        self.genuine_router_addr = ""
+        self.genuine_ra_hash = ""
+        
+        self.received_ra_flag = False
         self.flood_ra_flag = False
     
     def ra_init(self):
