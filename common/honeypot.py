@@ -244,7 +244,8 @@ class Honeypot(threading.Thread):
                     log_msg += "[%s], MAC: %s (%s).\n" % (target, target_mac, mac2vendor(target_mac))
                     msg = self.msg.new_msg(pkt)
                     if self.solicited_targets[target][0] == True: # DAD
-                        self.tentative_addrs.pop(target)
+                        if self.tentative_addrs.has_key(target):
+                            self.tentative_addrs.pop(target)
                         #log_msg += "DAD result: Address [%s] in use." % target
                         # Report this address-in-use event to 6guard, so as to detect the dos-new-ip6 attack.
                         msg['type'] = "DAD"
@@ -255,8 +256,9 @@ class Honeypot(threading.Thread):
                         msg['victim_mac'] = self.mac
                         msg['util'] = "Unknown"
                         self.msg.put_event(msg)
-                        self.dad_timer[target].cancel()
-                        del self.dad_timer[target]
+                        if self.dad_timer.has_key(target):
+                            self.dad_timer[target].cancel()
+                            del self.dad_timer[target]
                     else:
                         # Report this Neighbour Advertisement event to 6guard, so as to detect the parasite6 attack.
                         msg['type'] = "NDP"
