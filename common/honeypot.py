@@ -242,13 +242,17 @@ class Honeypot(threading.Thread):
                     target_mac = pkt[ICMPv6NDOptDstLLAddr].lladdr
                     self.ip6_neigh[target] = target_mac
                     log_msg += "[%s], MAC: %s (%s).\n" % (target, target_mac, mac2vendor(target_mac))
-                    msg = self.new_msg(pkt)
+                    msg = self.msg.new_msg(pkt)
                     if self.solicited_targets[target][0] == True: # DAD
                         self.tentative_addrs.pop(target)
                         #log_msg += "DAD result: Address [%s] in use." % target
                         # Report this address-in-use event to 6guard, so as to detect the dos-new-ip6 attack.
                         msg['type'] = "DAD"
                         msg['name'] = "Address in use"
+                        msg['attacker'] = "Unknown"
+                        msg['attacker_mac'] = pkt[Ether].src
+                        msg['victim'] = self.name
+                        msg['victim_mac'] = self.mac
                         msg['util'] = "Unknown"
                         self.msg.put_event(msg)
                         self.dad_timer[target].cancel()
@@ -257,16 +261,22 @@ class Honeypot(threading.Thread):
                         # Report this Neighbour Advertisement event to 6guard, so as to detect the parasite6 attack.
                         msg['type'] = "NDP"
                         msg['name'] = "Neighbour Advertisement"
+                        msg['attacker'] = pkt[IPv6].src
+                        msg['attacker_mac'] = pkt[Ether].src
+                        msg['target'] = pkt[ICMPv6ND_NA].tgt
+                        msg['lladdr'] = pkt[ICMPv6NDOptDstLLAddr].lladdr
                         msg['util'] = "Unknown"
                         self.msg.put_event(msg)
                     self.solicited_targets.pop(target)
             else:
                 if pkt[IPv6].dst != "ff02::1":
-                    msg = self.new_msg(pkt)
+                    msg = self.msg.new_msg(pkt)
                     msg['type'] = "NDP"
                     msg['name'] = "Unsolicited Neighbor Advertisement"
                     msg['attacker'] = pkt[IPv6].src
                     msg['attacker_mac'] = pkt[Ether].src
+                    msg['target'] = pkt[ICMPv6ND_NA].tgt
+                    msg['lladdr'] = pkt[ICMPv6NDOptDstLLAddr].lladdr
                     msg['util'] = "THC-IPv6: fake_advertise6"
                     self.msg.put_attack(msg)
             
@@ -446,6 +456,10 @@ class Honeypot(threading.Thread):
         new_addr = inet_ntop6(new_addr_n)
         return new_addr
         
+    def del_dict_element(self, d, e):
+        if d.has_key(d):
+            del d[e]
+    
     # Send Neighbour Solicitation packets.
     # TODO: How to select a source IPv6 address? It's a problem.
     def send_NDP_NS(self, target, dad_flag=False):
@@ -461,11 +475,22 @@ class Honeypot(threading.Thread):
             solic = Ether(dst=mac_dst, src=self.mac)/IPv6(src=ip6_src, dst=ip6_dst)/ICMPv6ND_NS(tgt=target)
             log_msg = "Duplicate Address Detection for [%s]." % target
         else:
-            ip6_src = self.unicast_addrs.keys()[0]
+            if len(self.unicast_addrs) == 0:
+                ip6_src = self.link_local_addr
+            else:
+                ip6_src = self.unicast_addrs.keys()[0]
             solic = Ether(dst=mac_dst, src=self.mac)/IPv6(src=ip6_src, dst=ip6_dst)/ICMPv6ND_NS(tgt=target)/ICMPv6NDOptSrcLLAddr(lladdr=self.mac)
             log_msg = "Neighbour Solicitation for [%s]." % target 
         self.send_packet(solic)
         self.log.debug(log_msg)
+        
+        # Add a timer to delete the target in self.solicited_targets
+        def del_solicited_target(target):
+            if self.solicited_targets.has_key(target):
+                del self.solicited_targets[target]
+        if dad_flag == False:
+            del_solicited_timer = threading.Timer(5.0, del_solicited_target, args=[target])
+            del_solicited_timer.start()
         return
     
     def dhcpv6(self, req):
