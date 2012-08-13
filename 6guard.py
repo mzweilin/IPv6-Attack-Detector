@@ -31,6 +31,14 @@ class HCenter():
         self.msg_handler.setDaemon(True)
         self.msg_handler.start()
         
+        # Attack event handler.
+        self.dos_honeypots = {} #{honeypot_name: latest_timestamp}
+        self.cancel_dos_timers = {} # {honeypot_name: timer}
+        
+        self.solicited_na_counter = 0
+        self.solicited_targets = []
+        self.regular_ns_timer = None
+        
     def __del__(self):
         self.attack_log.close()
         self.center_log.close()
@@ -46,9 +54,77 @@ class HCenter():
             if self.msg_queue.qsize() > 0:
                 msg = self.msg_queue.get()
                 self.attack_log.info(self.format_msg(msg))
+                self.event_handler(msg)
             time.sleep(1)
             #TODO: use event to get notification.
     
+    def event_handler(self, msg):
+        if msg['type'] == "DAD" and msg['name'] == "Address in use":
+            self.dos_new_ip6_handler(msg)
+        elif msg['level'] == "EVENT" and msg['type'] == "NDP":
+            self.parasite6_handler(msg)
+        #elif
+    
+    def cancel_dos_state(self, hn_name):
+        del self.dos_honeypots[hn_name]
+    
+    # TODO: regularly restart honeypots (or send NS message) to detect such attacks.
+    def dos_new_ip6_handler(self, msg):
+        dos_count = len(self.dos_honeypots) + 1
+        hn_len = len(self.honeypots)
+        if dos_count > 1 and float(dos_count)/float(hn_len) > 0.5:
+            # dos-new-ip6 attack
+            # Modify the message and resubmit.
+            msg['level'] = 'ATTACK'
+            msg['from'] = 'Analysis Center'
+            msg['type'] = 'DoS'
+            msg['name'] = 'dos-new-ip6'
+            msg['util'] = 'THC-IPv6: dos-new-ip6'
+            self.msg_queue.put(msg)
+        if self.dos_honeypots.has_key(msg['from']):
+            self.cancel_dos_timers[msg['from']].cancel()
+        self.dos_honeypots[msg['from']] = True
+        self.cancel_dos_timers[msg['from']] = threading.Timer(10.0, self.cancel_dos_state, args = [msg['from']])
+        self.cancel_dos_timers[msg['from']].start()
+        return
+    
+    def regular_ns(self):
+        if self.regular_ns_timer != None:
+            self.regular_ns_timer.cancel()
+        print "send 1 ns"
+        self.solicited_na_counter = 0
+        target = "2002:" + ':'.join(''.join(str(time.time()).split('.'))[-7:])
+        import random
+        source = random.choice(self.honeypots.keys())
+        self.honeypots[source][1].send_NDP_NS(target)
+        self.solicited_targets.append(target)
+        #global regular_ns_timer
+        self.regular_ns_timer = threading.Timer(10.0, self.regular_ns)
+        self.regular_ns_timer.start()
+    
+    def parasite6_handler(self, msg):
+        if msg['target'] in self.solicited_targets:
+            self.solicited_targets.remove(msg['target'])
+            counter = self.solicited_na_counter
+            counter += 1
+            print "counter:" + str(counter)
+            if counter >= 3:
+                # parasite6
+                msg['level'] = 'ATTACK'
+                msg['from'] = 'Analysis Center'
+                msg['type'] = 'MitM | DoS'
+                msg['name'] = 'False answer to Neighbor Solicitation'
+                msg['util'] = 'THC-IPv6: parasite6'
+                self.msg_queue.put(msg)
+            else:
+                # send another NS to confirm if it is parasite6 attack.
+                self.regular_ns()
+                self.solicited_na_counter += counter
+        
+    def ndp_handler(self, msg):
+        pass
+        
+            
     # Generate the honeypot configuration files.
     def generate_config(self):
         pass
@@ -151,13 +227,15 @@ def main():
     sixguard = HCenter()
     sixguard.load_config()
     sixguard.start_all_honeypots()
-    sixguard.start_globalpot()
+    time.sleep(2)
+    sixguard.regular_ns()
+    #sixguard.start_globalpot()
     
     try:
         raw_input("SixGuard is running...\n")
     except KeyboardInterrupt:
         sixguard.stop_all_honeypots()
-        sixguard.__del__()
+        del sixguard
             
 if __name__ == "__main__":
     main()
