@@ -13,7 +13,6 @@ class Globalpot(threading.Thread):
         self.msg.user = 'Globalpot'
         self.msg.msg_templete['attacker'] = 'Unknown'
         self.msg.msg_templete['victim'] = 'The whole network'
-        self.msg.msg_templete['from'] = 'Globalpot'
         
         # RAguard is responsible for detecting fake_router6, flood_router6, kill_router6
         self.ras = {}

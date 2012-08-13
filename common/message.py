@@ -17,6 +17,7 @@ class Message():
     
     def put_msg(self, msg):
         # Avoid putting flood messages.
+        msg['from'] = self.user
         msg_copy = msg.copy()
         msg_copy['timestamp'] = int(msg_copy['timestamp'])
         timestamp = (msg_copy['timestamp'])

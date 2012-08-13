@@ -68,7 +68,6 @@ class Honeypot(threading.Thread):
         self.msg.msg_templete['attacker'] = 'Unknown'
         self.msg.msg_templete['victim'] = self.name
         self.msg.msg_templete['victim_mac'] = self.mac
-        self.msg.msg_templete['from'] = self.name
         
         log_file = "./log/%s.log" % self.name
         self.log = logger.Log(log_file)
