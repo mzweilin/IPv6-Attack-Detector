@@ -13,6 +13,7 @@ class Analysis():
         self.solicited_na_counter = 0
         self.solicited_targets = []
         self.regular_ns_timer = None
+        self.regular_ns_dad_timer = None
         
     def __del__(self):
         # Cancel the timers.
@@ -45,6 +46,9 @@ class Analysis():
             msg['name'] = 'dos-new-ip6'
             msg['util'] = 'THC-IPv6: dos-new-ip6'
             self.msg_queue.put(msg)
+        else:
+            # Send another Neighbor Solicitation to confirm dos-new-ip6.
+            self.send_ns(dad_flag = True)
         if self.dos_honeypots.has_key(msg['from']):
             self.cancel_dos_timers[msg['from']].cancel()
         self.dos_honeypots[msg['from']] = True
@@ -52,15 +56,23 @@ class Analysis():
         self.cancel_dos_timers[msg['from']].start()
         return
     
+    def send_ns(self, dad_flag = False):
+        target = "2002:" + ':'.join(''.join(str(time.time()).split('.'))[-7:])
+        source = random.choice(self.honeypots.keys())
+        self.honeypots[source][1].send_NDP_NS(target, dad_flag)
+        return target
+        
+    def regular_ns_dad(self):
+        target = self.send_ns(True)
+        self.regular_ns_dad_timer = threading.Timer(10.0, self.regular_ns_dad)
+        self.regular_ns_dad_timer.start()
+    
     def regular_ns(self):
         if self.regular_ns_timer != None:
             self.regular_ns_timer.cancel()
-        print "send 1 ns"
+        #print "send 1 ns"
         self.solicited_na_counter = 0
-        target = "2002:" + ':'.join(''.join(str(time.time()).split('.'))[-7:])
-        import random
-        source = random.choice(self.honeypots.keys())
-        self.honeypots[source][1].send_NDP_NS(target)
+        target = self.send_ns()
         self.solicited_targets.append(target)
         #global regular_ns_timer
         self.regular_ns_timer = threading.Timer(10.0, self.regular_ns)

@@ -156,6 +156,7 @@ def main():
     sixguard.start_all_honeypots()
     time.sleep(2)
     sixguard.event_handler.regular_ns()
+    sixguard.event_handler.regular_ns_dad()
     #sixguard.start_globalpot()
     
     try:
