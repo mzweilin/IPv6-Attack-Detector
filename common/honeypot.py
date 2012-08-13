@@ -455,10 +455,6 @@ class Honeypot(threading.Thread):
         new_addr_n = in6_or(valid_prefix_n, iface_id_n)
         new_addr = inet_ntop6(new_addr_n)
         return new_addr
-        
-    def del_dict_element(self, d, e):
-        if d.has_key(d):
-            del d[e]
     
     # Send Neighbour Solicitation packets.
     # TODO: How to select a source IPv6 address? It's a problem.
