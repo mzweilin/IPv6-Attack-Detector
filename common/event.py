@@ -30,6 +30,10 @@ class Analysis():
             self.parasite6_handler(msg)
         #elif
     
+    def active_detection(self):
+        self.regular_ns()
+        self.regular_ns_dad()
+    
     def cancel_dos_state(self, hn_name):
         del self.dos_honeypots[hn_name]
     
@@ -56,11 +60,19 @@ class Analysis():
         self.cancel_dos_timers[msg['from']].start()
         return
     
+    # Randomly choose a honeypot to send a Neighbor Solicitation for random target.
     def send_ns(self, dad_flag = False):
         target = "2002:" + ':'.join(''.join(str(time.time()).split('.'))[-7:])
         source = random.choice(self.honeypots.keys())
-        self.honeypots[source][1].send_NDP_NS(target, dad_flag)
-        return target
+        retry = 1
+        while not self.honeypots[source][1].isAlive() and retry < 5:
+            source = random.choice(self.honeypots.keys())
+            retry += 1
+        if retry < 5:
+            self.honeypots[source][1].send_NDP_NS(target, dad_flag)
+            return target
+        else:
+            return None
         
     def regular_ns_dad(self):
         target = self.send_ns(True)
@@ -73,7 +85,8 @@ class Analysis():
         #print "send 1 ns"
         self.solicited_na_counter = 0
         target = self.send_ns()
-        self.solicited_targets.append(target)
+        if target != None:
+            self.solicited_targets.append(target)
         #global regular_ns_timer
         self.regular_ns_timer = threading.Timer(10.0, self.regular_ns)
         self.regular_ns_timer.start()
