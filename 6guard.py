@@ -12,51 +12,49 @@ from common import event
 conf_dir = "./conf"
 log_dir = "./log"
 pcap_dir = "./pcap"
-    
-# Honeypot Center
-class HCenter():
-    msg_queue = Queue()
-    honeypots = {} #{'name'-> [conf, thread_instance]}
-    
-    # Log
-    attack_log = None
-    center_log = None
+
+class SixGuard():
     
     def __init__(self):
+        # Log
         attack_log_filename = os.path.join(log_dir, "attack.log")
         self.attack_log = logger.Log(attack_log_filename, auto_timestamp = 0)
+        self.attack_log.set_print_level(3) # Only print the attacking message but not the event message.
+        
         center_log_filename = os.path.join(log_dir, "center.log")
         self.center_log = logger.Log(center_log_filename)
+        
+        # Honeypots and Globalpot
+        self.honeypots = {} #{'name'-> [conf, thread_instance]}
+        self.globalpot_cfg = None
+        
+        # Message management
+        self.msg_queue = Queue()
         
         self.msg_handler = threading.Thread(target = self.handle_msg)
         self.msg_handler.setDaemon(True)
         self.msg_handler.start()
         
+        # Handle the event message, sometimes will generate an attack message.
         self.event_handler = event.Analysis(self.msg_queue, self.honeypots)
         
     def __del__(self):
         self.attack_log.close()
         self.center_log.close()
-        
+    
+    
+    # Display, log, analyze, and report the EVENT/ATTACK messages.
     def handle_msg(self):
-        #Display
-        #Log
-        #Analisis
-        #Report
-        
         while True:
             if self.msg_queue.qsize() > 0:
                 msg = self.msg_queue.get()
                 self.attack_log.info(self.format_msg(msg))
-                self.event_handler.analyze(msg)
+                if msg['level'] == 'EVENT' and self.event_handler != None:
+                    self.event_handler.analyze(msg)
             time.sleep(1)
             #TODO: use event to get notification.
-            
-    # Generate the honeypot configuration files.
-    def generate_config(self):
-        pass
     
-    # Loade the configuration files of honeypot.
+    # Loade the configuration files of honeypots and globalpot.
     def load_config(self):
         cfg = ConfigParser.SafeConfigParser()
         for parent, dirnames, filenames in os.walk(conf_dir):
@@ -68,18 +66,20 @@ class HCenter():
                     try:
                         config.parse_config(cfg)
                     except config.ParsingError, err:
-                        self.center_log.errer(str(err))
+                        self.center_log.error(str(err))
                         continue
                     self.center_log.info("Configuration file <%s> loaded." % conf_file)
                     
-                    honeypot_cfg = config.config.copy()
-                    config.config.clear()
-                    
-                    name = honeypot_cfg['name']
-                    if self.honeypots.has_key(name):
-                        self.center_log.warning("Duplicate name of honeypots: %s\n", name)
+                    if config.config['name'] == "Globalpot":
+                        self.globalpot_cfg = config.config.copy()
                     else:
-                        self.honeypots[name] = [honeypot_cfg, None]
+                        honeypot_cfg = config.config.copy()
+                        name = honeypot_cfg['name']
+                        if self.honeypots.has_key(name):
+                            self.center_log.warning("Duplicate name of honeypots: %s\n", name)
+                        else:
+                            self.honeypots[name] = [honeypot_cfg, None]
+                    config.config.clear()
         return
     
     
@@ -122,9 +122,10 @@ class HCenter():
         return
             
     def start_globalpot(self):
-        gp = Globalpot(self.msg_queue)
-        gp.setDaemon(True)
-        gp.start()
+        if self.globalpot_cfg != None:
+            gp = Globalpot(self.globalpot_cfg, self.msg_queue)
+            gp.setDaemon(True)
+            gp.start()
         return
     
     def format_msg(self, msg):
@@ -151,14 +152,25 @@ class HCenter():
         return msg_str
         
 def main():
-    sixguard = HCenter()
+    sixguard = SixGuard()
     sixguard.load_config()
-    sixguard.start_all_honeypots()
-    sixguard.event_handler.active_detection()
-    #sixguard.start_globalpot()
+    if len(sixguard.honeypots) == 0:
+        print "No honeypot configuration files found."
+        print "Please run ./honeypot_cfg_generator.py to create some."
+    else:
+        sixguard.start_all_honeypots()
+        
+    if sixguard.event_handler != None:
+        sixguard.event_handler.active_detection()
+        
+    if sixguard.globalpot_cfg == None:
+        print "No globalpot configuration filel found."
+        print "Please run ./cfg_generator.py to create one."
+    else:
+        sixguard.start_globalpot()
     
     try:
-        raw_input("SixGuard is running...\n")
+        raw_input("SixGuard is running...\nPress <Ctrl>+Z to stop.\n")
     except KeyboardInterrupt:
         sixguard.stop_all_honeypots()
         del sixguard
