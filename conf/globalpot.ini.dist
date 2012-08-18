@@ -1,0 +1,6 @@
+[main]
+name = Globalpot
+interface = eth5
+
+#[feature]
+#RA_guard = 1
