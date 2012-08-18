@@ -194,15 +194,6 @@ class Globalpot(threading.Thread):
                     clear_flood_na = threading.Timer(5.0, self.clear_flood_na)
                     clear_flood_na.start()
                     return
-            else:
-                msg = self.msg.new_msg(pkt)
-                msg['type'] = 'DoS'
-                msg['name'] = 'Neighbor Solicitation to ff02::1'
-                msg['attacker'] = pkt[IPv6].src
-                msg['attacker_mac'] = pkt[Ether].src
-                msg['victim'] = pkt[ICMPv6ND_NS].tgt
-                msg['util'] = "THC-IPv6: rsmurf6 | sendpeesmp6"
-                self.msg.put_attack(msg)
             return 1
         return 0
         
