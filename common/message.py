@@ -1,7 +1,38 @@
 import os
 import md5
+import struct
 
 class Message():
+    
+    # The format of pcap file references to http://wiki.wireshark.org/Development/LibpcapFileFormat/#Libpcap_File_Format
+    def __get_pcap_hdr(self):
+        #32bits
+        magic_number = 0xa1b2c3d4
+        #16bits
+        version_major = 0x2
+        #16bits
+        version_minor = 0x4
+        #32bits
+        thiszone = 0
+        #32bits
+        sigfigs = 0
+        #32bits
+        snaplen = 0xffff
+        #32bits, Ethernet
+        network = 0x1
+        return struct.pack('IHHIIII', magic_number, version_major, version_minor, thiszone, sigfigs, snaplen, network)
+    
+    def __get_pcaprec_hdr(self, pkt):
+        time_str = "%f" % pkt.time
+        
+        # 32 + 32 bits, timestamp
+        ts_sec, ts_usec = map(int, time_str.split('.'))
+        #32bits
+        incl_len = len(pkt)
+        #32bits
+        orig_len = len(pkt)
+        return struct.pack('IIII', ts_sec, ts_usec, incl_len, orig_len)
+    
     def __init__(self, msg_queue):
         self.msg_queue = msg_queue
         
@@ -47,6 +78,8 @@ class Message():
         location = './pcap/' + filename
         if not os.path.isfile(location):
             pcap_file = open(location, 'wb')
+            hdr = self.__get_pcap_hdr() + self.__get_pcaprec_hdr(pkt)
+            pcap_file.write(hdr)
             pcap_file.write(str(pkt))
             pcap_file.close()
         return filename
