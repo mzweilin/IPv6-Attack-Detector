@@ -63,7 +63,7 @@ class Analysis():
     def dos_new_ip6_handler(self, msg):
         dos_count = len(self.dos_honeypots) + 1
         hn_len = len(self.honeypots)
-        if dos_count > 1 and float(dos_count)/float(hn_len) > 0.5:
+        if dos_count >= 3 or dos_count > 1 and float(dos_count)/float(hn_len) > 0.5:
             # dos-new-ip6 attack
             # Modify the message and resubmit.
             msg['level'] = 'ATTACK'
