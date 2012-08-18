@@ -30,35 +30,10 @@ class Analysis():
             self.parasite6_handler(msg)
         #elif
     
+    # Active behavior that will enhance the capability of attack detection.
     def active_detection(self):
         self.regular_ns()
         self.regular_ns_dad()
-    
-    def cancel_dos_state(self, hn_name):
-        del self.dos_honeypots[hn_name]
-    
-    # TODO: regularly restart honeypots (or send NS message) to detect such attacks.
-    def dos_new_ip6_handler(self, msg):
-        dos_count = len(self.dos_honeypots) + 1
-        hn_len = len(self.honeypots)
-        if dos_count > 1 and float(dos_count)/float(hn_len) > 0.5:
-            # dos-new-ip6 attack
-            # Modify the message and resubmit.
-            msg['level'] = 'ATTACK'
-            msg['from'] = 'Analysis Center'
-            msg['type'] = 'DoS'
-            msg['name'] = 'dos-new-ip6'
-            msg['util'] = 'THC-IPv6: dos-new-ip6'
-            self.msg_queue.put(msg)
-        else:
-            # Send another Neighbor Solicitation to confirm dos-new-ip6.
-            self.send_ns(dad_flag = True)
-        if self.dos_honeypots.has_key(msg['from']):
-            self.cancel_dos_timers[msg['from']].cancel()
-        self.dos_honeypots[msg['from']] = True
-        self.cancel_dos_timers[msg['from']] = threading.Timer(10.0, self.cancel_dos_state, args = [msg['from']])
-        self.cancel_dos_timers[msg['from']].start()
-        return
     
     # Randomly choose a honeypot to send a Neighbor Solicitation for random target.
     def send_ns(self, dad_flag = False):
@@ -73,12 +48,41 @@ class Analysis():
             return target
         else:
             return None
-        
+    
+    # Cancel the dos attacking alert of a honeypot after a timeout.
+    def cancel_dos_state(self, hn_name):
+        del self.dos_honeypots[hn_name]
+    
+    # Regularly send a Neighbor Solicitation message for DAD mechanism.
     def regular_ns_dad(self):
         target = self.send_ns(True)
         self.regular_ns_dad_timer = threading.Timer(10.0, self.regular_ns_dad)
         self.regular_ns_dad_timer.start()
+        
+    # Detect the THC-IPv6 dos-new-ip6 attacking.
+    def dos_new_ip6_handler(self, msg):
+        dos_count = len(self.dos_honeypots) + 1
+        hn_len = len(self.honeypots)
+        if dos_count > 1 and float(dos_count)/float(hn_len) > 0.5:
+            # dos-new-ip6 attack
+            # Modify the message and resubmit.
+            msg['level'] = 'ATTACK'
+            msg['from'] = 'Event Analysis Center'
+            msg['type'] = 'DoS'
+            msg['name'] = 'dos-new-ip6'
+            msg['util'] = 'THC-IPv6: dos-new-ip6'
+            self.msg_queue.put(msg)
+        else:
+            # Send another Neighbor Solicitation to confirm dos-new-ip6.
+            self.send_ns(dad_flag = True)
+        if self.dos_honeypots.has_key(msg['from']):
+            self.cancel_dos_timers[msg['from']].cancel()
+        self.dos_honeypots[msg['from']] = True
+        self.cancel_dos_timers[msg['from']] = threading.Timer(10.0, self.cancel_dos_state, args = [msg['from']])
+        self.cancel_dos_timers[msg['from']].start()
+        return
     
+    # Regularly send a Neighbor Solicitation to a random target.
     def regular_ns(self):
         if self.regular_ns_timer != None:
             self.regular_ns_timer.cancel()
@@ -91,6 +95,7 @@ class Analysis():
         self.regular_ns_timer = threading.Timer(10.0, self.regular_ns)
         self.regular_ns_timer.start()
     
+    # Detect the THC-IPv6: parasite6 attacking.
     def parasite6_handler(self, msg):
         if msg['target'] in self.solicited_targets:
             self.solicited_targets.remove(msg['target'])
@@ -100,7 +105,7 @@ class Analysis():
             if counter >= 3:
                 # parasite6
                 msg['level'] = 'ATTACK'
-                msg['from'] = 'Analysis Center'
+                msg['from'] = 'Event Analysis Center'
                 msg['type'] = 'MitM | DoS'
                 msg['name'] = 'False answer to Neighbor Solicitation'
                 msg['util'] = 'THC-IPv6: parasite6'
