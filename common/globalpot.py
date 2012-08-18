@@ -5,9 +5,9 @@ import message
         
 class Globalpot(threading.Thread):
     
-    def __init__(self, msg_queue):
+    def __init__(self, cfg, msg_queue):
         threading.Thread.__init__(self)
-        self.iface = 'eth5'
+        self.iface = cfg['iface']
         
         self.msg = message.Message(msg_queue)
         self.msg.user = 'Globalpot'
@@ -56,7 +56,7 @@ class Globalpot(threading.Thread):
     def run(self):
         globalpot_lfilter = lambda (r): IPv6 in r and (r[IPv6].dst == 'ff02::1' or r[IPv6].dst == 'ff02::1:2')
         #self.ra_init()
-        print "\n Globalpot is running..."
+        print "Globalpot starts.\n"
         sniff(iface=self.iface, filter="ip6", lfilter = globalpot_lfilter, prn=self.process)
     
     def process(self, pkt):
