@@ -27,7 +27,7 @@ class Log:
         self.write(msg, 0)
     def info(self, msg):
         self.write(msg, 1)
-    def warnning(self, msg):
+    def warning(self, msg):
         self.write(msg, 2)
     def alert(self, msg):
         self.write(msg, 3)

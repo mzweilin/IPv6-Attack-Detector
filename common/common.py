@@ -79,7 +79,7 @@ def vendor2mac_ia(keyword, quantity = 1):
         choice = -1
         while choice<0 or choice>len(can_list):
             choice = int(raw_input("Please input the index number: "))
-        if choice == len(can_list):
+        if choice <= len(can_list):
             prefix_list = []
             for key in can_list:
                 prefix_list.extend(oui_rdict[key])
