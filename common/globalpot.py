@@ -48,16 +48,17 @@ class Globalpot(threading.Thread):
         # From https://home.regit.org/2012/06/using-scapy-lfilter/
         while not self.received_ra_flag:
             print "Please wait %d seconds to sniff Router Advertisement: " % timeout
-            sniff(iface=self.iface, filter="ip6", lfilter = ra_lfilter, prn=self.sniff_ra, timeout = timeout)
+            sniff(iface=self.iface, filter="icmp6", lfilter = ra_lfilter, prn=self.sniff_ra, timeout = timeout)
         self.select_genuine_ra()
         print "The genuine Router Advertisement is: "
         self.print_ra(self.genuine_ra)
     
     def run(self):
+        globalpot_filter = "ip6 and (dst host ff02::1 or ff02::1:2)"
         globalpot_lfilter = lambda (r): IPv6 in r and (r[IPv6].dst == 'ff02::1' or r[IPv6].dst == 'ff02::1:2')
         #self.ra_init()
         print "Globalpot starts.\n"
-        sniff(iface=self.iface, filter="ip6", lfilter = globalpot_lfilter, prn=self.process)
+        sniff(iface=self.iface, filter=globalpot_filter, lfilter = globalpot_lfilter, prn=self.process)
     
     def process(self, pkt):
         #if self.pre_attack_detector(pkt) != 0:

@@ -99,8 +99,9 @@ class Honeypot(threading.Thread):
         rs = Ether(src=self.mac, dst='33:33:00:00:00:02')/IPv6(src=self.link_local_addr, dst='ff02::2')/ICMPv6ND_RS()
         self.send_packet(rs)
         
+        ip6_filter = "ip6 and not tcp and not udp"
         ip6_lfilter = lambda (r): IPv6 in r and TCP not in r and UDP not in r and r[IPv6].dst in self.dst_addrs
-        sniff(iface=self.iface, filter="ip6", lfilter=ip6_lfilter, prn=self.process)
+        sniff(iface=self.iface, filter=ip6_filter, lfilter=ip6_lfilter, prn=self.process)
 
     def process(self, pkt):
         if self.pre_attack_detector(pkt) != 0:
@@ -155,7 +156,7 @@ class Honeypot(threading.Thread):
                 #self.log.info("Duplicate spoofing Alert!")
                 #return 2
         if packet[Ether].src == self.mac or packet[IPv6].src != "::" and packet[IPv6].src in self.src_addrs:
-            msg = self.new_msg(packet)
+            msg = self.msg.new_msg(packet)
             if ICMPv6EchoRequest in packet:
                 msg['type'] = 'DoS'
                 msg['name'] = 'Fake Echo Request'
@@ -195,7 +196,8 @@ class Honeypot(threading.Thread):
             self.sent_sigs[sig] = 1
         sendp(packet, iface=self.iface)
         self.log.debug("Sent 1 packet: %s" % packet.summary())
-        self.log.debug("Packet hex: %s" % sig)
+        # The packet summary infomation is just enough.
+        #self.log.debug("Packet hex: %s" % sig)
         
     # Handle the IPv6 invalid extention header options. (One of Nmap's host discovery technique.)
     # ret: 0: Valid extension header, need further processing.
@@ -507,7 +509,7 @@ class Honeypot(threading.Thread):
     def handle_attack(self, pkt):
         # redir6 attack
         if ICMPv6ND_Redirect in pkt:
-            msg = self.new_msg(pkt)
+            msg = self.msg.new_msg(pkt)
             msg['type'] = 'MitM | DoS'
             msg['name'] = 'ICMPv6 Redirect'
             msg['attacker'] = pkt[ICMPv6ND_Redirect].tgt
