@@ -158,7 +158,7 @@ def main():
     sixguard.load_config()
     if len(sixguard.honeypots) == 0:
         print "No honeypot configuration files found."
-        print "Please run ./honeypot_cfg_generator.py to create some."
+        print "Please run ./conf_generator.py to create some."
     else:
         sixguard.start_all_honeypots()
         
@@ -167,7 +167,7 @@ def main():
         
     if sixguard.globalpot_cfg == None:
         print "No globalpot configuration filel found."
-        print "Please run ./cfg_generator.py to create one."
+        print "Please run ./conf_generator.py to create one."
     else:
         sixguard.start_globalpot()
     
