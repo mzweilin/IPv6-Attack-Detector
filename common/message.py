@@ -74,7 +74,8 @@ class Message():
         
     def save_pcap(self, attack, pkt):
         hash_str = md5.md5(str(pkt)).hexdigest()
-        filename = "%s_%s.pcap" % (self.user, hash_str)
+        #filename = "%s_%s.pcap" % (self.user, hash_str)
+        filename = "%s.pcap" % hash_str
         location = './pcap/' + filename
         if not os.path.isfile(location):
             pcap_file = open(location, 'wb')
