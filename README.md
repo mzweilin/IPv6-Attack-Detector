@@ -28,6 +28,8 @@ Here is an example of the attacking alert message provided by 6Guard.
 1. Enter the directory of 6Guard.
 2. Run `$ sudo ./conf_generator.py` to generate the configuration files.
 3. Run `$ sudo ./6guadrd.py`.
+
+
 **Note**
 * If it is the first time running 6guard, it will remind you to choice a genuine Router Advertisement message.
 * The attacking alert message will be printed in the screen in real time.
