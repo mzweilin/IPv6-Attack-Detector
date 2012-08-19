@@ -23,7 +23,7 @@ def main():
         elif choice == '1':
             honeypot_cfg()
         elif choice == '2':
-            os.system('rm ./conf/*.ini')
+            os.system('rm ./conf/*.ini ./conf/*.pcap')
     
 def honeypot_cfg():
     quantity = ""

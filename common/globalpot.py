@@ -2,6 +2,7 @@ import threading, md5
 from scapy.all import *
 from common import *
 import message
+import struct, os
         
 class Globalpot(threading.Thread):
     
@@ -40,6 +41,22 @@ class Globalpot(threading.Thread):
         
         
     def ra_init(self):
+        filename = "globalpot_genuine_ra.pcap"
+        location = './conf/' + filename
+        if os.path.isfile(location):
+            pcap_file = rdpcap(location)
+            pkt = pcap_file[0]
+            ra = pkt[ICMPv6ND_RA]
+            ra.cksum = 0
+            md5hash = md5.md5(str(ra)).hexdigest()
+            
+            self.genuine_ra_hash = md5hash
+            self.genuine_ra = pkt
+            iface_id = in6_mactoifaceid(self.genuine_ra.lladdr).lower()
+            self.genuine_router_addr = in6_ptop("fe80::" + iface_id)
+            print "Have selected the saved Router Advertisement as the genuine one."
+            self.print_ra(self.genuine_ra)
+            return True
         ra_lfilter = lambda (r): IPv6 in r and ICMPv6ND_RA in r
         # Send a Router Solicitation to get all Router Advertisement messages.
         # In the future, it can call IPv6 honeypots to send RS message.
@@ -56,7 +73,7 @@ class Globalpot(threading.Thread):
     def run(self):
         globalpot_filter = "ip6 and (dst host ff02::1 or ff02::1:2)"
         globalpot_lfilter = lambda (r): IPv6 in r and (r[IPv6].dst == 'ff02::1' or r[IPv6].dst == 'ff02::1:2')
-        #self.ra_init()
+        self.ra_init()
         print "Globalpot starts.\n"
         sniff(iface=self.iface, filter=globalpot_filter, lfilter = globalpot_lfilter, prn=self.process)
     
@@ -251,7 +268,7 @@ class Globalpot(threading.Thread):
             self.ras[md5hash][1] += 1
             #print "+1"
         else:
-            self.ras[md5hash] = [ra, 1]
+            self.ras[md5hash] = [pkt, 1]
             #print "new"
         self.received_ra_flag = True
         return
@@ -279,6 +296,7 @@ class Globalpot(threading.Thread):
             self.genuine_ra_hash = ra_list[select_index][0]
         iface_id = in6_mactoifaceid(self.genuine_ra.lladdr).lower()
         self.genuine_router_addr = in6_ptop("fe80::" + iface_id)
+        self.save_pcap(self.genuine_ra)
             
     def clear_flood_ra(self):
         self.flood_ra_flag = False
@@ -387,3 +405,42 @@ class Globalpot(threading.Thread):
                     % (ra.preferredlifetime, ra.preferredlifetime)
         print ""
 
+    # The format of pcap file references to http://wiki.wireshark.org/Development/LibpcapFileFormat/#Libpcap_File_Format
+    def __get_pcap_hdr(self):
+        #32bits
+        magic_number = 0xa1b2c3d4
+        #16bits
+        version_major = 0x2
+        #16bits
+        version_minor = 0x4
+        #32bits
+        thiszone = 0
+        #32bits
+        sigfigs = 0
+        #32bits
+        snaplen = 0xffff
+        #32bits, Ethernet
+        network = 0x1
+        return struct.pack('IHHIIII', magic_number, version_major, version_minor, thiszone, sigfigs, snaplen, network)
+    
+    def __get_pcaprec_hdr(self, pkt):
+        time_str = "%f" % pkt.time
+        
+        # 32 + 32 bits, timestamp
+        ts_sec, ts_usec = map(int, time_str.split('.'))
+        #32bits
+        incl_len = len(pkt)
+        #32bits
+        orig_len = len(pkt)
+        return struct.pack('IIII', ts_sec, ts_usec, incl_len, orig_len)
+        
+    def save_pcap(self, pkt):
+        #filename = "%s_%s.pcap" % (self.user, hash_str)
+        filename = "globalpot_genuine_ra.pcap"
+        location = './conf/' + filename
+        pcap_file = open(location, 'wb')
+        hdr = self.__get_pcap_hdr() + self.__get_pcaprec_hdr(pkt)
+        pcap_file.write(hdr)
+        pcap_file.write(str(pkt))
+        pcap_file.close()
+        return filename
