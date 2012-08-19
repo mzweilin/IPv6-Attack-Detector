@@ -7,17 +7,17 @@
 6Guard is sponsered by Google Summer of Code 2012 and supported by The Honeynet Project organization. The project page is at [Project 9 - IPv6 attack detector (Xu)](https://www.honeynet.org/gsoc/slots).
 
 Here is an example of the attacking alert message provided by 6Guard.
-pre..
-[ATTACK]
-Timestamp: 2012-08-19 14:48:27
-Reported by: Honeypot-apple-2A:C4:2D
-Type: DoS
-Name: Fake Echo Request
-Attacker: [Unknown]  00:00:de:ad:be:ef (CETIA)
-Victim  : [Honeypot-apple-2A:C4:2D]  40:3C:FC:2A:C4:2D (Apple, Inc.)
-Utility: THC-IPv6: smurf6
-Packets: b12fe3415c1d61c1da085cb8811974a2.pcap
-p.
+
+    [ATTACK]
+    Timestamp: 2012-08-19 14:48:27
+    Reported by: Honeypot-apple-2A:C4:2D
+    Type: DoS
+    Name: Fake Echo Request
+    Attacker: [Unknown]  00:00:de:ad:be:ef (CETIA)
+    Victim  : [Honeypot-apple-2A:C4:2D]  40:3C:FC:2A:C4:2D (Apple, Inc.)
+    Utility: THC-IPv6: smurf6
+    Packets: b12fe3415c1d61c1da085cb8811974a2.pcap
+
 
 ##Installation
 1. Download and install [Scapy](http://www.secdev.org/projects/scapy/) in your machine.
