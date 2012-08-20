@@ -408,7 +408,7 @@ class Honeypot(threading.Thread):
         self.dst_addrs.append(new_addr)
         
         log_msg = "Add a new address: %s/%d" % (new_addr, prefix_len)
-        self.log.debug(log_msg)
+        self.log.info(log_msg)
         return
         
     def update_addr(self, addr, time_list):
@@ -424,7 +424,7 @@ class Honeypot(threading.Thread):
             self.addr_timer[addr] = threading.Timer(valid_lifetime, self.del_addr, args = [addr])
             self.addr_timer[addr].start()
         log_msg = "Updated the address [%s]." % addr
-        self.log.debug(log_msg)
+        self.log.info(log_msg)
         
     def del_addr(self, addr):
         if self.unicast_addrs.has_key(addr):
@@ -438,7 +438,7 @@ class Honeypot(threading.Thread):
             log_msg = "Deleted an expired address: [%s]" % addr
         else:
             log_msg = "Deleted an address: [%s]" % addr
-        self.log.debug(log_msg)
+        self.log.info(log_msg)
     
     # Generate a new IPv6 unicast address like [Prefix + interface identifier]/Prefixlen.
     def prefix2addr(self, prefix, prefix_len):
