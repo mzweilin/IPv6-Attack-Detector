@@ -20,8 +20,8 @@ Here is an example of the attacking alert message provided by 6Guard.
 
 
 ##Installation
-1. Download and install [Scapy](http://www.secdev.org/projects/scapy/) in your machine.
-2. Download the latest code from [Github/mzweilin/ipv6-attack-detector](https://github.com/mzweilin/ipv6-attack-detector).
+1. Download and install [Scapy](http://www.secdev.org/projects/scapy/) in your machine. (Or `apt-get install python-scapy`)
+2. Download the latest code from [Github/mzweilin/ipv6-attack-detector](https://github.com/mzweilin/ipv6-attack-detector) and extract it into a directory.
 
 
 ##Usage
@@ -34,4 +34,4 @@ Here is an example of the attacking alert message provided by 6Guard.
 * If it is the first time running 6guard, it will remind you to choice a genuine Router Advertisement message.
 * The attacking alert message will be printed in the screen in real time.
 * The attacking alert message will be also stored in the log file './log/attack.log'.'
-* The attacking alert message includes an item 'Packets', telling where to find the related pcap file that can be reviewd in Wireshark.
+* The attacking alert message includes an item 'Packets', telling which pcap file in './pcap/' is the related one that can be reviewd in Wireshark.
