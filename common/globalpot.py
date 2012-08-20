@@ -303,7 +303,7 @@ class Globalpot(threading.Thread):
     
     # If the received RA doesn't match with the self.genuine_ra, print Alert!
     def ra_guard(self, pkt):
-        if pkt[ICMPv6ND_RA].routerlifetime == 0:
+        if pkt[ICMPv6ND_RA].routerlifetime == 0 and pkt.haslayer(ICMPv6NDOptPrefixInfo):
             # SLAAC for host discovery.
             msg = self.msg.new_msg(pkt)
             msg['type'] = "HostDiscovery"
