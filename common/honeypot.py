@@ -495,17 +495,6 @@ class Honeypot(threading.Thread):
     def dhcpv6(self, req):
         return
         
-    def build_attack_msg(self, attack):
-        log_msg = "[Attack Detected]\n"
-        log_msg += "Timestamp: %s\n" % attack['timestamp']
-        log_msg += "Type: %s\n" % attack['type']
-        log_msg += "Name: %s\n" % attack['name']
-        log_msg += "From: [%s]\n      MAC: %s (%s)\n" % (attack['src'], attack['mac_src'], mac2vendor(attack['mac_src']))
-        log_msg += "To: [%s]\n    MAC: %s (%s)\n" % (attack['dst'], attack['mac_dst'], mac2vendor(attack['mac_dst']))
-        log_msg += "Utility: %s\n" % attack['util']
-        log_msg += "Packets: %s\n" % attack['pcap']
-        return log_msg
-        
     def handle_attack(self, pkt):
         # redir6 attack
         if ICMPv6ND_Redirect in pkt:
