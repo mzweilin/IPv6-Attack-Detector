@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os, threading, time
+import os, threading, time, sys
 from Queue import Queue
 from common import logger
 from common.honeypot import Honeypot
@@ -166,18 +166,17 @@ def main():
     if len(sixguard.honeypots) == 0:
         print "No honeypot configuration files found."
         print "Please run ./conf_generator.py to create some."
-    else:
-        sixguard.start_all_honeypots()
+        sys.exit()
+    if sixguard.globalpot_cfg == None:
+        print "No globalpot configuration filel found."
+        print "Please run ./conf_generator.py to create one."
+        sys.exit()
+    sixguard.start_all_honeypots()
+    sixguard.start_globalpot()
         
     if sixguard.event_handler != None:
         sixguard.event_handler.active_detection()
         
-    if sixguard.globalpot_cfg == None:
-        print "No globalpot configuration filel found."
-        print "Please run ./conf_generator.py to create one."
-    else:
-        sixguard.start_globalpot()
-    
     try:
         raw_input("SixGuard is running...\nPress <Ctrl>+Z to stop.\n")
     except KeyboardInterrupt:
