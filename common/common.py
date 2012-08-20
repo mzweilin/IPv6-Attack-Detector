@@ -71,6 +71,7 @@ def vendor2mac_ia(keyword, quantity = 1):
     
     if len(can_list) == 0:
         return None
+    prefix_list = []
     if len(can_list) != 1:
         print "\nWhat do you mean when specifying \"%s\"?" % keyword
         for i in range(0, len(can_list)):
@@ -80,9 +81,10 @@ def vendor2mac_ia(keyword, quantity = 1):
         while choice<0 or choice>len(can_list):
             choice = int(raw_input("Please input the index number: "))
         if choice <= len(can_list):
-            prefix_list = []
             for key in can_list:
                 prefix_list.extend(oui_rdict[key])
+    else:
+        prefix_list.extend(oui_rdict[can_list[0]])
                 
     if quantity == 1:
         return vendor2mac(can_list[0])
