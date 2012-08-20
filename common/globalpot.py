@@ -193,6 +193,9 @@ class Globalpot(threading.Thread):
                     msg = self.msg.new_msg(pkt)
                     msg['type'] = 'DoS'
                     msg['name'] = 'Fake Neighbor Advertisement to ff02::1'
+                    msg['tgt'] = pkt.tgt
+                    msg['src'] = pkt[IPv6].src
+                    msg['lladdr'] = pkt.lladdr
                     msg['util'] = "THC-IPv6: fake_advertise6"
                     self.msg.put_attack(msg)
                 else:

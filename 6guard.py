@@ -149,6 +149,13 @@ class SixGuard():
                 msg_str += "  %s (%s)\n" % (msg['victim_mac'], mac2vendor(msg['victim_mac']))
             else:
                 msg_str += '\n'
+        if msg.has_key('tgt'):
+            msg_str += "Target [%s]\n" % msg['tgt']
+        if msg.has_key("src"):
+            msg_str += "Source: [%s]" % msg['src']
+            if msg.has_key("lladdr"):
+                msg_str += "  MAC: %s (%s)" % (msg['lladdr'], mac2vendor(msg['lladdr']))
+            msg_str += "\n"
         msg_str += "Utility: %s\n" % msg['util']
         msg_str += "Packets: %s\n" % msg['pcap']
         return msg_str
