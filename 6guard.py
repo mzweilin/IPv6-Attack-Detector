@@ -165,11 +165,11 @@ def main():
     sixguard.load_config()
     if len(sixguard.honeypots) == 0:
         print "No honeypot configuration files found."
-        print "Please run ./conf_generator.py to create some."
+        print "Please run `sudo ./conf_generator.py` to create some."
         sys.exit()
     if sixguard.globalpot_cfg == None:
         print "No globalpot configuration filel found."
-        print "Please run ./conf_generator.py to create one."
+        print "Please run `sudo ./conf_generator.py` to create one."
         sys.exit()
     sixguard.start_all_honeypots()
     sixguard.start_globalpot()
