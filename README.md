@@ -1,7 +1,7 @@
 6Guard (IPv6 attack detector)
 =============================
 
-##Description
+## Description
 6Guard is an IPv6 attack detector aiming at link-local level security threats, including most attacks initiated by [the THC-IPv6 suit](http://thc.org/thc-ipv6/) and the advanced host discovery methods used by [Nmap](http://nmap.org). It can help the network administrators detect the link-local IPv6 attacks in the early stage.
 
 6Guard is sponsored by Google Summer of Code 2012 and supported by The Honeynet Project organization. The project page is at [Project 9 - IPv6 attack detector (Xu)](https://www.honeynet.org/gsoc/slots).
@@ -19,12 +19,12 @@ Here is an example of the attacking alert message provided by 6Guard.
     Packets: b12fe3415c1d61c1da085cb8811974a2.pcap
 
 
-##Installation
+## Installation
 1. Download and install [Scapy](http://www.secdev.org/projects/scapy/) in your machine. (Or `apt-get install python-scapy`)
 2. Download the latest code from [Github/mzweilin/ipv6-attack-detector](https://github.com/mzweilin/ipv6-attack-detector) and extract it into a directory.
 
 
-##Usage
+## Usage
 1. Enter the directory of 6Guard.
 2. Run `$ sudo ./conf_generator.py` to generate the configuration files.
 3. Run `$ sudo ./6guadrd.py`.
